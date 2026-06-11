@@ -217,9 +217,9 @@ function buildDocx(data) {
   });
 
   const SECTIONS = [
-    { key: 'market',  label: '📊 ตลาด' },
-    { key: 'company', label: '🏢 บริษัท' },
-    { key: 'economy', label: '📈 ตัวเลขเศรษฐกิจ' },
+    { key: 'market',  label: 'ตลาด' },
+    { key: 'company', label: 'บริษัท' },
+    { key: 'economy', label: 'ตัวเลขเศรษฐกิจ' },
   ];
 
   const newsBlock = (item, index) => {
