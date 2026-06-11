@@ -2,7 +2,7 @@ name: Daily Market Brief
 
 on:
   schedule:
-    - cron: '0 0 * * 1-5'    # 07:00 น. ไทย วันจันทร์-ศุกร์
+    - cron: '50 23 * * 0-4'    # 07:00 น. ไทย วันจันทร์-ศุกร์
   workflow_dispatch:
 
 jobs:
