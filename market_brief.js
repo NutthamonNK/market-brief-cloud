@@ -325,6 +325,10 @@ async function sendEmail(dateSlug, dateTh, docxBuffer) {
     service: 'gmail',
     auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
   });
+  const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const [year, month, day] = dateSlug.split('-');
+  const buddhistYear = parseInt(year) + 543;
+  const shortDate = `${parseInt(day)} ${months[parseInt(month)-1]} ${buddhistYear}`;
   await transporter.sendMail({
     from: process.env.GMAIL_USER,
     to: process.env.GMAIL_TO,
