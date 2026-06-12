@@ -197,7 +197,20 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
   });
 
   const text = msg.content[0].text.trim().replace(/^```json|```$/g, '').trim();
-  return JSON.parse(text);
+  try {
+    return JSON.parse(text);
+  } catch(e) {
+    // ถ้า JSON ไม่สมบูรณ์ให้ retry ด้วย max_tokens มากขึ้น
+    const msg2 = await client.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 32000,
+      system,
+      messages: [{ role: 'user', content: articlesText }],
+    });
+    const text2 = msg2.content[0].text.trim().replace(/^```json|```$/g, '').trim();
+    return JSON.parse(text2);
+  }
+
 }
 
 // ─── 4. สร้าง .docx พร้อม section headers ───────────────────────────────────
