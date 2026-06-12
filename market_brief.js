@@ -333,7 +333,7 @@ async function sendEmail(dateSlug, dateTh, docxBuffer) {
     from: process.env.GMAIL_USER,
     to: process.env.GMAIL_TO,
     subject: `Daily Market Brief ประจำวันที่ ${shortDate}`,
-    text: 'สวัสดีค่ะพี่อรรถ\nขออนุญาตส่ง Daily Market Brief ประจำวันที่ ${shortDate} ค่ะ\n\nขอบคุณค่ะ\nนันท์',
+    text: `สวัสดีค่ะพี่อรรถ\n\nขออนุญาตส่ง Daily Market Brief ประจำวันที่ ${shortDate} ค่ะ\n\nขอบคุณค่ะ\nนันท์`,
     attachments: [{ filename: `Market_Brief_${dateSlug}.docx`, content: docxBuffer }],
   });
   console.log(`Sent: Market_Brief_${dateSlug}.docx`);
