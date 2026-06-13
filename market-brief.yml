@@ -2,8 +2,8 @@ name: Daily Market Brief
 
 on:
   schedule:
-    - cron: '53 * * * *' # รันทุก ๆ นาทีที่ 53 ของชั่วโมงเพื่อเลี่ยงคิวหนาแน่น
-  workflow_dispatch:      # ช่วยให้กดปุ่มสั่งรันด้วยมือจากหน้าเว็บเพื่อเช็กโค้ดได้
+    - cron: '53 * * * *'
+  workflow_dispatch:
 
 jobs:
   run:
