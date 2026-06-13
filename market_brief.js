@@ -193,6 +193,7 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
 
   const msg = await client.messages.create({
     model: 'claude-sonnet-4-5',
+    temperature: 0,
     max_tokens: 16000,
     system,
     messages: [{ role: 'user', content: articlesText }],
@@ -206,6 +207,7 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
     const msg2 = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 32000,
+      temperature: 0,
       system,
       messages: [{ role: 'user', content: articlesText }],
     });
