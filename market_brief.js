@@ -171,7 +171,7 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
 - รวม 3 bullets ไม่เกิน 250 คำต่อข่าว
 - ห้ามใช้ - เป็น connector ให้ใช้ "โดย / ขณะที่ / ส่งผลให้" แทน
 - ใส่วงเล็บอธิบายเฉพาะ acronym และศัพท์เฉพาะทางที่คนทั่วไปไม่รู้จัก เช่น USDA (กระทรวงเกษตรสหรัฐฯ) ไม่ต้องใส่คำทั่วไปอย่างเงินเฟ้อ อัตราดอกเบี้ย หรือชื่อบริษัท/ดัชนี proper noun
-- หัวข้อข่าว: แปล Headline เป็นภาษาไทย แต่ใช้ศัพท์ Technical ได้
+- หัวข้อข่าว: แปล Headline เป็นภาษาไทยทั้งหมด
 - URLs label: ใช้ headline จริงของบทความ ห้ามแต่งเอง
 - ภาพรวม 2-3 ประโยค ต้องระบุตัวเลขและชื่อหุ้นเฉพาะ เช่น "Dow ดิ่ง 620 จุดหลัง Iran โจมตี Kuwait"
 
@@ -182,7 +182,7 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
   "overview": "ภาพรวม 2-3 ประโยค",
   "news": [{
     "category": "market|company|economy",
-    "title": "headline จริงจาก CNBC และเปลเป็นภาษาไทย",
+    "title": "headline จาก CNBC และเปลเป็นภาษาไทยทั้งหมด",
     "time": "X มิ.ย. 256X (HH:MM UTC = HH:MM น. ไทย)",
     "bullets": ["bullet1", "bullet2", "bullet3"],
     "urls": [{ "url": "https://...", "label": "headline จริงของบทความ" }]
