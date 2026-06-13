@@ -187,7 +187,7 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
     "title": "headline จาก CNBC และเปลเป็นภาษาไทยทั้งหมด",
     "time": "X มิ.ย. 256X (HH:MM UTC = HH:MM น. ไทย)",
     "bullets": ["bullet1", "bullet2", "bullet3"],
-    "urls": [{ "url": "https://...", "label": "headline จริงของบทความ" }]
+    "urls": [{ "url": "https://...", "label": "headline จริงของบทความภาษาอังกฤษตามที่ปรากฏใน article ห้ามแต่งเอง ห้ามใช้ชื่อ section หรือ category เช่น Options Action หรือ Mad Money" }]
   }]
 }`;
 
