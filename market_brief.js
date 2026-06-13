@@ -142,7 +142,9 @@ async function summarizeWithClaude(articlesText) {
 
 ## กฎการกรอง
 - รับเฉพาะบทความที่เผยแพร่ภายใน 24 ชั่วโมงก่อนรัน บทความเก่ากว่านั้นตัดออก
-- ตัดออกเฉพาะ: Sports, Lifestyle (แฟชั่น ท่องเที่ยว cooking), Entertainment (ดนตรี ภาพยนตร์ celebrity), Mad Money, Cramer Lightning Round, Trade Alerts, CNBC Pro (ไม่มี body)
+- ตัดออกเฉพาะ: Sports, Lifestyle (แฟชั่น ท่องเที่ยว cooking), Entertainment (ดนตรี ภาพยนตร์ celebrity), Mad Money, Cramer Lightning Round, Trade Alerts, CNBC Pro (ไม่มี body) 
+บทความที่มีเนื้อหาเป็น opinion หรือ commentary ล้วนๆ โดยไม่มีข้อเท็จจริงหรือเหตุการณ์ใหม่ประกอบ
+- opinion ของนักวิเคราะห์สามารถอยู่ใน bullets ได้ แต่ต้องเป็นส่วนประกอบของข่าวจริง ไม่ใช่ตัวข่าวหลัก
 - เก็บทั้งหมดที่เหลือโดยไม่มีข้อยกเว้น ห้ามตัดเพราะคิดว่าไม่สำคัญพอหรือซ้ำกับวันก่อน
 
 ## กฎการรวมข่าว
@@ -159,9 +161,6 @@ async function summarizeWithClaude(articlesText) {
 
 Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq ดิ่ง 3% → market
 
-เรียงภายใน category จากใหม่สุดขึ้นก่อน (UTC+7)
-ลำดับ section ตายตัว: market → company → economy
-
 ## กฎการเขียน
 - ภาษาไทย เขียนเหมือนอัปเดตงานให้ผู้ใหญ่ฟัง กระชับ ตรงประเด็น
 - 3 bullets ต่อข่าว ห้ามขึ้นต้น bullet ด้วย label เช่น "ใจความสำคัญ:" ให้เขียนเนื้อหาตรงๆ
@@ -174,6 +173,9 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
 - หัวข้อข่าว: แปล Headline เป็นภาษาไทยทั้งหมดห้ามใช้ประโยคภาษาอังกฤษในหัวข้อ ยกเว้นคำเฉพาะเช่นชื่อบริษัท ชื่อหุ้น หรือศัพท์เทคนิคสามารถทับศัพท์ได้
 - URLs label: ใช้ headline จริงของบทความ ห้ามแต่งเอง
 - ภาพรวม 2-3 ประโยค ต้องระบุตัวเลขและชื่อหุ้นเฉพาะ เช่น "Dow ดิ่ง 620 จุดหลัง Iran โจมตี Kuwait"
+- เวลาที่แสดงให้ใช้ timestamp จาก Timestamp field ที่ส่งมาพร้อม article โดยตรง ถ้าเวลาเป็น EDT ให้บวก 11 ชั่วโมงเพื่อแปลงเป็นเวลาไทย ถ้าเป็น UTC ให้บวก 7 ชั่วโมง ห้ามเดาหรือประมาณเวลาเอง
+- เรียงข่าวจากใหม่สุดไปเก่าสุดโดยใช้ timestamp จริงของบทความ ไม่ใช่เวลาที่ Claude ประมวลผล
+- ลำดับ section ตายตัว: market → economy → company
 
 ตอบเป็น JSON ล้วน ไม่มี markdown backticks:
 {
