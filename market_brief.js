@@ -15,8 +15,8 @@ async function getArticleList(browser) {
   });
   await page.waitForTimeout(2000);
 
-  // scroll 8 รอบเพื่อโหลดข่าวเพิ่ม
-  for (let i = 0; i < 8; i++) {
+  // scroll 6 รอบเพื่อโหลดข่าวเพิ่ม
+  for (let i = 0; i < 6; i++) {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(1500);
   }
@@ -86,7 +86,7 @@ async function getArticleList(browser) {
 async function getArticleContent(browser, article) {
   const page = await browser.newPage();
   try {
-    await page.goto(article.url, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    await page.goto(article.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     const result = await page.evaluate(() => {
       // ดึง timestamp จาก meta tag (UTC แม่นยำ)
