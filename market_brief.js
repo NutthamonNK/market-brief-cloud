@@ -174,7 +174,6 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
 - URLs label: ใช้ headline จริงของบทความ ห้ามแต่งเอง
 - ภาพรวม 2-3 ประโยค ต้องระบุตัวเลขและชื่อหุ้นเฉพาะ เช่น "Dow ดิ่ง 620 จุดหลัง Iran โจมตี Kuwait"
 - เวลาที่แสดงให้ใช้ timestamp จาก Timestamp field ที่ส่งมาพร้อม article โดยตรง ถ้าเวลาเป็น EDT ให้บวก 11 ชั่วโมงเพื่อแปลงเป็นเวลาไทย ถ้าเป็น UTC ให้บวก 7 ชั่วโมง ห้ามเดาหรือประมาณเวลาเอง
-- เรียงข่าวจากใหม่สุดไปเก่าสุดโดยใช้ timestamp จริงของบทความ ไม่ใช่เวลาที่ Claude ประมวลผล
 - ลำดับ section ตายตัว: market → economy → company
 
 ตอบเป็น JSON ล้วน ไม่มี markdown backticks:
@@ -357,8 +356,11 @@ async function main() {
     console.log(`Found ${articleList.length} articles (latest + trending)`);
 
     // fetch ทุกบทความก่อน ห้ามกรองจาก headline
-    const nonPro = articleList.filter(a => !a.isPro);
-    console.log(`Step 2-3: Fetching ${nonPro.length} articles...`);
+    const nonPro = articleList
+      .filter(a => !a.isPro)
+      .sort((a, b) => new Date(b.time) - new Date(a.time))
+      .slice(0, 25);
+    console.log(Step 2-3: Fetching ${nonPro.length} articles...);
     const articles = await fetchArticlesParallel(browser, nonPro);
 
     // กรอง Pro และ empty content ออกหลัง fetch
