@@ -365,8 +365,15 @@ async function main() {
     // กรอง Pro และ empty content ออกหลัง fetch
     const valid = articles
       .filter(a => !a.isPro && a.content && a.content.length > 100)
-      .sort((a, b) => new Date(b.publishedTime) - new Date(a.publishedTime));    console.log(`Valid articles after fetch: ${valid.length}`);
-    const articlesText = valid.map(a =>
+      .sort((a, b) => new Date(b.publishedTime) - new Date(a.publishedTime));
+    console.log(`Valid articles after fetch: ${valid.length}`);
+    
+    const todayTh = new Date().toLocaleDateString('th-TH', { 
+      timeZone: 'Asia/Bangkok',
+      year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
+    });
+    
+    const articlesText = `วันที่ปัจจุบัน (ไทย): ${todayTh}\n\n` + valid.map(a =>
       `URL: ${a.url}\nHeadline: ${a.headline || a.title}\nPublished (UTC): ${a.publishedTime || a.time}\n\n${a.content}`
     ).join('\n\n---\n\n');
 
