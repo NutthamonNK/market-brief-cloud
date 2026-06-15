@@ -83,13 +83,13 @@ async function getArticleList(browser) {
 
 // ─── 2. Playwright: ดึง content + UTC timestamp ของแต่ละบทความ ───────────────
 
-async function getArticleContent(browser, article) {
+async function getArticleContent(browser, article, retries = 1) {
   const page = await browser.newPage();
   try {
     await page.goto(article.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
 
     const result = await page.evaluate(() => {
-      // ดึง timestamp จาก meta tag (UTC แม่นยำ)
+      // ดึง timestamp จาก meta tag (UTC แน่นอน)
       const metaTime = document.querySelector('meta[property="article:published_time"]')?.content
         || document.querySelector('time[datetime]')?.getAttribute('datetime')
         || '';
@@ -116,12 +116,15 @@ async function getArticleContent(browser, article) {
 
     return { ...article, ...result };
   } catch (e) {
+    await page.close();
+    if (retries > 0) {
+      return getArticleContent(browser, article, retries - 1);
+    }
     return { ...article, isPro: false, content: '', publishedTime: '', headline: '' };
   } finally {
     await page.close();
   }
 }
-
 // ดึง content แบบ parallel (4 tabs พร้อมกัน)
 async function fetchArticlesParallel(browser, articles, concurrency = 4) {
   const results = [];
