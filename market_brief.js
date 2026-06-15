@@ -176,7 +176,7 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
 - หัวข้อข่าว: แปล Headline เป็นภาษาไทยทั้งหมดห้ามใช้ประโยคภาษาอังกฤษในหัวข้อ ยกเว้นคำเฉพาะเช่นชื่อบริษัท ชื่อหุ้น หรือศัพท์เทคนิคสามารถทับศัพท์ได้
 - URLs label: ใช้ headline จริงของบทความ ห้ามแต่งเอง
 - ภาพรวม 2-3 ประโยค ต้องระบุตัวเลขและชื่อหุ้นเฉพาะ เช่น "Dow ดิ่ง 620 จุดหลัง Iran โจมตี Kuwait"
-- เวลาที่แสดงให้แปลงเป็นเวลาไทยโดยตรง EDT บวก 11 ชั่วโมง เช่น 09:00 AM EDT = 20:00 น. ไทย, 7:06 PM EDT = 06:06 น. ไทยวันถัดไป ไม่ต้องผ่าน UTC ห้ามเดาหรือประมาณเวลาเอง
+- เวลาที่แสดงใน time field ให้ใช้ค่า "Published (Thai)" ที่ส่งมาให้ตรงๆ ห้ามคำนวณหรือแปลงเองเด็ดขาด
 - ลำดับ section ตายตัว: market → economy → company
 
 ตอบเป็น JSON ล้วน ไม่มี markdown backticks:
@@ -345,6 +345,24 @@ async function sendEmail(dateSlug, dateTh, docxBuffer) {
   console.log(`Sent: Market_Brief_${dateSlug}.docx`);
 }
 
+// ─── Helper: UTC → เวลาไทย ───────────────────────────────────────────────────
+
+function utcToThaiTime(utcStr) {
+  if (!utcStr) return '';
+  const d = new Date(utcStr);
+  if (isNaN(d)) return '';
+  const thai = new Date(d.getTime() + 7 * 60 * 60 * 1000);
+  const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const day = thai.getUTCDate();
+  const mon = months[thai.getUTCMonth()];
+  const year = thai.getUTCFullYear() + 543;
+  const hh = String(thai.getUTCHours()).padStart(2, '0');
+  const mm = String(thai.getUTCMinutes()).padStart(2, '0');
+  const utcHH = String(d.getUTCHours()).padStart(2, '0');
+  const utcMM = String(d.getUTCMinutes()).padStart(2, '0');
+  return `${day} ${mon} ${year} (${utcHH}:${utcMM} UTC = ${hh}:${mm} น. ไทย)`;
+}
+
 // ─── Main ────────────────────────────────────────────────────────────────────
 
 async function main() {
@@ -385,7 +403,7 @@ async function main() {
     });
     
     const articlesText = `วันที่ปัจจุบัน (ไทย): ${todayTh}\n\n` + valid.map(a =>
-      `URL: ${a.url}\nHeadline: ${a.headline || a.title}\nPublished (UTC): ${a.publishedTime || a.time}\n\n${a.content}`
+      `URL: ${a.url}\nHeadline: ${a.headline || a.title}\nPublished (UTC): ${a.publishedTime || a.time}\nPublished (Thai): ${utcToThaiTime(a.publishedTime)}\n\n${a.content}`
     ).join('\n\n---\n\n');
 
     console.log('Step 4: Summarizing with Claude...');
