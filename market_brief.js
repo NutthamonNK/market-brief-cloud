@@ -15,8 +15,8 @@ async function getArticleList(browser) {
   });
   await page.waitForTimeout(2000);
 
-  // scroll 4 รอบเพื่อโหลดข่าวเพิ่ม
-  for (let i = 0; i < 4; i++) {
+  // scroll 8 รอบเพื่อโหลดข่าวเพิ่ม
+  for (let i = 0; i < 8; i++) {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(1500);
   }
