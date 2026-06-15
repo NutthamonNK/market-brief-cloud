@@ -370,10 +370,15 @@ async function main() {
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const valid = articles
       .filter(a => !a.isPro && a.content && a.content.length > 100)
-      .filter(a => !a.publishedTime || new Date(a.publishedTime) > oneDayAgo)
+      .filter(a => {
+        if (!a.publishedTime) return true;
+        const date = new Date(a.publishedTime);
+        if (isNaN(date)) return true;
+        return date > oneDayAgo;
+      })
       .sort((a, b) => new Date(b.publishedTime) - new Date(a.publishedTime));
     console.log(`Valid articles after fetch: ${valid.length}`);
-    
+
     const todayTh = new Date().toLocaleDateString('th-TH', { 
       timeZone: 'Asia/Bangkok',
       year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
