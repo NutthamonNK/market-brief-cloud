@@ -363,8 +363,10 @@ async function main() {
     const articles = await fetchArticlesParallel(browser, nonPro);
 
     // กรอง Pro และ empty content ออกหลัง fetch
+    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const valid = articles
       .filter(a => !a.isPro && a.content && a.content.length > 100)
+      .filter(a => !a.publishedTime || new Date(a.publishedTime) > oneDayAgo)
       .sort((a, b) => new Date(b.publishedTime) - new Date(a.publishedTime));
     console.log(`Valid articles after fetch: ${valid.length}`);
     
