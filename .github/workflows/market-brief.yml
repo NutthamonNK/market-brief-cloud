@@ -1,11 +1,11 @@
 name: Daily Market Brief
-
 on:
   workflow_dispatch:
-
 jobs:
   run:
     runs-on: ubuntu-latest
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
