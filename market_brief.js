@@ -358,15 +358,14 @@ async function main() {
     // fetch ทุกบทความก่อน ห้ามกรองจาก headline
     const nonPro = articleList
       .filter(a => !a.isPro)
-      .sort((a, b) => new Date(b.time) - new Date(a.time))
       .slice(0, 25);
     console.log('Step 2-3: Fetching ' + nonPro.length + ' articles...');
     const articles = await fetchArticlesParallel(browser, nonPro);
 
     // กรอง Pro และ empty content ออกหลัง fetch
-    const valid = articles.filter(a => !a.isPro && a.content && a.content.length > 100);
-    console.log(`Valid articles after fetch: ${valid.length}`);
-
+    const valid = articles
+      .filter(a => !a.isPro && a.content && a.content.length > 100)
+      .sort((a, b) => new Date(b.publishedTime) - new Date(a.publishedTime));    console.log(`Valid articles after fetch: ${valid.length}`);
     const articlesText = valid.map(a =>
       `URL: ${a.url}\nHeadline: ${a.headline || a.title}\nPublished (UTC): ${a.publishedTime || a.time}\n\n${a.content}`
     ).join('\n\n---\n\n');
