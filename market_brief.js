@@ -360,7 +360,7 @@ async function main() {
       .filter(a => !a.isPro)
       .sort((a, b) => new Date(b.time) - new Date(a.time))
       .slice(0, 25);
-    console.log(Step 2-3: Fetching ${nonPro.length} articles...);
+    console.log('Step 2-3: Fetching ' + nonPro.length + ' articles...');
     const articles = await fetchArticlesParallel(browser, nonPro);
 
     // กรอง Pro และ empty content ออกหลัง fetch
