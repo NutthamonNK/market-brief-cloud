@@ -361,6 +361,7 @@ async function main() {
       .slice(0, 25);
     console.log('Step 2-3: Fetching ' + nonPro.length + ' articles...');
     const articles = await fetchArticlesParallel(browser, nonPro);
+    articles.forEach(a => console.log(a.url, '|', a.publishedTime));
 
     // กรอง Pro และ empty content ออกหลัง fetch
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
