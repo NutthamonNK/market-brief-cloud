@@ -387,12 +387,20 @@ async function main() {
     // กรอง Pro และ empty content ออกหลัง fetch
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const valid = articles
-      .filter(a => !a.isPro && a.content && a.content.length > 100)
+      .filter(a => {
+        if (a.isPro) { console.log('SKIP isPro:', a.url); return false; }
+        if (!a.content || a.content.length <= 100) {
+          console.log('SKIP short content:', a.url, 'length:', a.content?.length ?? 0);
+          return false;
+        }
+        return true;
+      })
       .filter(a => {
         if (!a.publishedTime) return true;
         const date = new Date(a.publishedTime);
         if (isNaN(date)) return true;
-        return date > oneDayAgo;
+        if (date <= oneDayAgo) { console.log('SKIP old:', a.url, a.publishedTime); return false; }
+        return true;
       })
       .sort((a, b) => new Date(b.publishedTime) - new Date(a.publishedTime));
     console.log(`Valid articles after fetch: ${valid.length}`);
