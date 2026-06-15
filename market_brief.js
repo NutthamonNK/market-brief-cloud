@@ -96,7 +96,7 @@ async function getArticleContent(browser, article) {
 
       // ตรวจ Pro paywall
       const bodyText = document.body.innerText;
-      if (bodyText.length < 400 && /subscri|sign.?in|premium/i.test(bodyText)) {
+      if (bodyText.length < 200 && /subscri|sign.?in|premium/i.test(bodyText)) {
         return { isPro: true, content: '', publishedTime: metaTime, headline: '' };
       }
 
