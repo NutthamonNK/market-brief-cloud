@@ -379,7 +379,7 @@ async function main() {
     // fetch ทุกบทความก่อน ห้ามกรองจาก headline
     const nonPro = articleList
       .filter(a => !a.isPro)
-      .slice(0, 25);
+      .slice(0, 40);
     console.log('Step 2-3: Fetching ' + nonPro.length + ' articles...');
     const articles = await fetchArticlesParallel(browser, nonPro);
     articles.forEach(a => console.log(a.url, '|', a.publishedTime));
