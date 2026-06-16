@@ -57,20 +57,21 @@ async function getMarketData(browser) {
     await page.waitForTimeout(2000);
     const bond = await page.evaluate(() => {
       const body = document.body.innerText;
-      // หา 10-Year yield value
-      const yieldMatch = body.match(/10[- ]?Year[^%\n]{0,50}?(\d+\.\d+)%/i)
-        || body.match(/US\s*10[- ]?Y[^%\n]{0,30}?(\d+\.\d+)%/i);
-      // หา bps change
-      const bpsMatch = body.match(/([+-]?\d+\.?\d*)\s*bps/i)
-        || body.match(/([+-]?\d+\.?\d*)\s*basis/i);
+      // format จริงในหน้า: "US 10-YR  4.445  -0.024"
+      const rowMatch = body.match(/US\s*10[-\s]?YR[^\n]*?(\d+\.\d+)[^\n]*?([+-]\d+\.\d+)/i);
+      if (rowMatch) return { value: rowMatch[1], change: rowMatch[2] };
+      // fallback
+      const yieldMatch = body.match(/US\s*10[-\s]?YR\s+(\d+\.\d+)/i);
+      const changeMatch = body.match(/US\s*10[-\s]?YR[^\n]*?([+-]\d+\.\d+)/i);
       return {
-        value: yieldMatch ? yieldMatch[1] + '%' : '',
-        change: bpsMatch ? bpsMatch[1] : '',
+        value: yieldMatch ? yieldMatch[1] : '',
+        change: changeMatch ? changeMatch[1] : '',
       };
     });
-    result.yield10y.value = bond.value;
+    result.yield10y.value = bond.value ? bond.value + '%' : '';
     if (bond.change) {
-      const bps = parseFloat(bond.change);
+      // CNBC แสดง change เป็น decimal: -0.024 = -2.4 bps
+      const bps = Math.round(parseFloat(bond.change) * 100);
       result.yield10y.change = Math.abs(bps) + ' bps';
       result.yield10y.direction = bps >= 0 ? 'เพิ่มขึ้น' : 'ลดลง';
     }
