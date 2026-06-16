@@ -6,6 +6,137 @@ const {
   HeadingLevel, LevelFormat, BorderStyle, ExternalHyperlink,
 } = require('docx');
 
+// ─── 0. Playwright: ดึง Market Data จาก 3 แหล่ง ────────────────────────────
+
+async function getMarketData(browser) {
+  const result = {
+    sp500: '', nasdaq: '', dow: '',
+    yield10y: { value: '', change: '', direction: '' },
+    sectors: { upCount: 0, upList: '', best: '', worst: '' },
+  };
+
+  // 0.1 ดัชนีหลัก — cnbc.com/markets/
+  try {
+    const page = await browser.newPage();
+    await page.goto('https://www.cnbc.com/markets/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(2000);
+    const indices = await page.evaluate(() => {
+      const out = {};
+      document.querySelectorAll('[class*="QuoteStrip"], [class*="marketData"], [class*="market-data"], [class*="summary-stock"]').forEach(el => {
+        const text = el.innerText;
+        const sp = text.match(/S&P\s*500[^\d-+]*([+-]?\d+\.?\d*%)/i);
+        const nq = text.match(/Nasdaq[^\d-+]*([+-]?\d+\.?\d*%)/i);
+        const dj = text.match(/Dow[^\d-+]*([+-]?\d+\.?\d*%)/i);
+        if (sp) out.sp500 = sp[1];
+        if (nq) out.nasdaq = nq[1];
+        if (dj) out.dow = dj[1];
+      });
+      // fallback: scan all text
+      if (!out.sp500) {
+        const body = document.body.innerText;
+        const sp = body.match(/S&P\s*500[^%\n]{0,30}([+-]\d+\.?\d*%)/i);
+        const nq = body.match(/Nasdaq[^%\n]{0,30}([+-]\d+\.?\d*%)/i);
+        const dj = body.match(/Dow[^%\n]{0,30}([+-]\d+\.?\d*%)/i);
+        if (sp) out.sp500 = sp[1];
+        if (nq) out.nasdaq = nq[1];
+        if (dj) out.dow = dj[1];
+      }
+      return out;
+    });
+    Object.assign(result, indices);
+    await page.close();
+    console.log('Market indices:', result.sp500, result.nasdaq, result.dow);
+  } catch (e) {
+    console.error('getMarketData indices error:', e.message);
+  }
+
+  // 0.2 Bond Yield — cnbc.com/markets/bonds/
+  try {
+    const page = await browser.newPage();
+    await page.goto('https://www.cnbc.com/markets/bonds/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(2000);
+    const bond = await page.evaluate(() => {
+      const body = document.body.innerText;
+      // หา 10-Year yield value
+      const yieldMatch = body.match(/10[- ]?Year[^%\n]{0,50}?(\d+\.\d+)%/i)
+        || body.match(/US\s*10[- ]?Y[^%\n]{0,30}?(\d+\.\d+)%/i);
+      // หา bps change
+      const bpsMatch = body.match(/([+-]?\d+\.?\d*)\s*bps/i)
+        || body.match(/([+-]?\d+\.?\d*)\s*basis/i);
+      return {
+        value: yieldMatch ? yieldMatch[1] + '%' : '',
+        change: bpsMatch ? bpsMatch[1] : '',
+      };
+    });
+    result.yield10y.value = bond.value;
+    if (bond.change) {
+      const bps = parseFloat(bond.change);
+      result.yield10y.change = Math.abs(bps) + ' bps';
+      result.yield10y.direction = bps >= 0 ? 'เพิ่มขึ้น' : 'ลดลง';
+    }
+    await page.close();
+    console.log('Bond yield:', result.yield10y);
+  } catch (e) {
+    console.error('getMarketData bond error:', e.message);
+  }
+
+  // 0.3 Sector Performance — ssga.com sector-tracker
+  try {
+    const page = await browser.newPage();
+    await page.goto('https://www.ssga.com/us/en/intermediary/resources/sector-tracker', {
+      waitUntil: 'networkidle', timeout: 45000,
+    });
+    await page.waitForTimeout(3000);
+    const sectors = await page.evaluate(() => {
+      const sectorMap = {
+        'XLK': 'Technology', 'XLF': 'Financials', 'XLV': 'Health Care',
+        'XLC': 'Communication Services', 'XLY': 'Consumer Discretionary',
+        'XLP': 'Consumer Staples', 'XLE': 'Energy', 'XLI': 'Industrials',
+        'XLB': 'Materials', 'XLRE': 'Real Estate', 'XLU': 'Utilities',
+      };
+      const results = [];
+      // พยายามดึงจาก table หรือ card elements
+      document.querySelectorAll('[class*="sector"], [class*="Sector"], tr, [class*="card"]').forEach(el => {
+        const text = el.innerText || '';
+        // หา ticker + % change pattern
+        Object.entries(sectorMap).forEach(([ticker, name]) => {
+          if (text.includes(ticker)) {
+            const pct = text.match(/([+-]?\d+\.\d+)%/);
+            if (pct) {
+              results.push({ name, ticker, change: parseFloat(pct[1]) });
+            }
+          }
+        });
+      });
+      // fallback: scan body text
+      if (results.length === 0) {
+        const body = document.body.innerText;
+        Object.entries(sectorMap).forEach(([ticker, name]) => {
+          const re = new RegExp(ticker + '[^%\\n]{0,30}([+-]?\\d+\\.\\d+)%', 'i');
+          const m = body.match(re);
+          if (m) results.push({ name, ticker, change: parseFloat(m[1]) });
+        });
+      }
+      return results;
+    });
+
+    if (sectors.length > 0) {
+      const up = sectors.filter(s => s.change > 0).sort((a, b) => b.change - a.change);
+      const down = sectors.filter(s => s.change < 0).sort((a, b) => a.change - b.change);
+      const best = up[0] ? `${up[0].name} ${up[0].change > 0 ? '+' : ''}${up[0].change.toFixed(2)}%` : '';
+      const worst = down[0] ? `${down[0].name} ${down[0].change.toFixed(2)}%` : '';
+      const upList = up.map(s => `${s.name} +${s.change.toFixed(2)}%`).join(', ');
+      result.sectors = { upCount: up.length, upList, best, worst };
+    }
+    await page.close();
+    console.log('Sectors:', result.sectors);
+  } catch (e) {
+    console.error('getMarketData sector error:', e.message);
+  }
+
+  return result;
+}
+
 // ─── 1. Playwright: ดึง article list + trending จาก cnbc.com/latest/ ─────────
 
 async function getArticleList(browser) {
@@ -15,7 +146,6 @@ async function getArticleList(browser) {
   });
   await page.waitForTimeout(2000);
 
-  // scroll 6 รอบเพื่อโหลดข่าวเพิ่ม
   for (let i = 0; i < 6; i++) {
     await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
     await page.waitForTimeout(1500);
@@ -25,7 +155,6 @@ async function getArticleList(browser) {
     const seen = new Set();
     const results = [];
 
-    // ดึงจาก latest list
     document.querySelectorAll('a[href]').forEach(a => {
       const url = a.href;
       if (!url.match(/cnbc\.com\/202[56]\/\d{2}\/\d{2}\//)) return;
@@ -51,14 +180,12 @@ async function getArticleList(browser) {
       results.push({ url, title, time: timeText, isPro, source: 'latest' });
     });
 
-    // ดึงจาก trending section แยกต่างหาก
     const trendingUrls = new Set();
     document.querySelectorAll('[class*="trending"] a, [class*="Trending"] a, [class*="TrendingNow"] a').forEach(a => {
       if (a.href && a.href.match(/cnbc\.com\/202\d\/\d{2}\/\d{2}\//)) {
         trendingUrls.add(a.href);
       }
     });
-    // fallback: หา parent ที่มี "trending" class
     document.querySelectorAll('a').forEach(a => {
       const p = a.closest('[class*="trending"],[class*="Trending"]');
       if (p && a.href && a.href.match(/cnbc\.com\/202\d\/\d{2}\/\d{2}\//)) {
@@ -66,7 +193,6 @@ async function getArticleList(browser) {
       }
     });
 
-    // เพิ่ม trending URL ที่ยังไม่มีใน list
     trendingUrls.forEach(url => {
       if (!seen.has(url)) {
         seen.add(url);
@@ -89,21 +215,17 @@ async function getArticleContent(browser, article, retries = 1) {
     await page.goto(article.url, { waitUntil: 'networkidle', timeout: 30000 });
 
     const result = await page.evaluate(() => {
-      // ดึง timestamp จาก meta tag (UTC แน่นอน)
       const metaTime = document.querySelector('meta[property="article:published_time"]')?.content
         || document.querySelector('time[datetime]')?.getAttribute('datetime')
         || '';
 
-      // ตรวจ Pro paywall
       const bodyText = document.body.innerText;
       if (bodyText.length < 200 && /subscri|sign.?in|premium/i.test(bodyText)) {
         return { isPro: true, content: '', publishedTime: metaTime, headline: '' };
       }
 
-      // ดึง headline จริงของบทความ
       const headline = document.querySelector('h1')?.textContent.trim() || '';
 
-      // ดึง article body
       const articleEl =
         document.querySelector('[class*="ArticleBody"]') ||
         document.querySelector('article') ||
@@ -125,7 +247,7 @@ async function getArticleContent(browser, article, retries = 1) {
     await page.close();
   }
 }
-// ดึง content แบบ parallel (4 tabs พร้อมกัน)
+
 async function fetchArticlesParallel(browser, articles, concurrency = 4) {
   const results = [];
   for (let i = 0; i < articles.length; i += concurrency) {
@@ -153,7 +275,7 @@ async function summarizeWithClaude(articlesText) {
 ## กฎการรวมข่าว
 - รวมได้เฉพาะ same actor + same event เท่านั้น
 - เมื่อรวม ให้ระบุ timestamp แยกกันในช่อง time และรวม URL ทั้งหมดไว้ใน urls
-- ถ้าบทความที่รวมเป็น escalation หรือเหตุการณ์ต่อเนื่อง ให้เรียง context ตามลำดับเวลาจากเก่าไปใหม่เสมอ ห้ามกระโดดไปเหตุการณ์ล่าสุดโดยไม่ให้ context ก่อน
+- ถ้าบทความที่รวมเป็น escalation หรือเหตุการณ์ต่อเนื่อง ให้เรียง context ตามลำดับเวลาจากเก่าไปใหม่เสมอ
 - บทความที่มี update ให้ใช้ version update เป็นหลัก timestamp ใช้ของ update นั้น
 
 ## กฎการ categorize
@@ -162,20 +284,18 @@ async function summarizeWithClaude(articlesText) {
 - "company": earnings, M&A, IPO, CEO/management, product launch, layoffs, legal/regulatory ของบริษัทเฉพาะ
 - "economy": GDP, CPI, jobs report, PMI, trade data, นโยบาย central bank, geopolitics ที่กระทบ macro
 
-Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq ดิ่ง 3% → market
-
 ## กฎการเขียน
 - ภาษาไทย เขียนเหมือนอัปเดตงานให้ผู้ใหญ่ฟัง กระชับ ตรงประเด็น
-- 3 bullets ต่อข่าว ห้ามขึ้นต้น bullet ด้วย label เช่น "ใจความสำคัญ:" ให้เขียนเนื้อหาตรงๆ
+- 3 bullets ต่อข่าว ห้ามขึ้นต้น bullet ด้วย label
   - bullet 1: เกิดอะไรขึ้น ใคร ทำอะไร ตัวเลขคืออะไร
   - bullet 2: บริบทหรือที่มาที่ช่วยให้เข้าใจ
-  - bullet 3: ผลกระทบ — ต้องมาจากบทความเท่านั้น (ปฏิกิริยาตลาด, ความเห็นนักวิเคราะห์ที่อ้างในบทความ) ห้าม inference เอง
+  - bullet 3: ผลกระทบ — ต้องมาจากบทความเท่านั้น ห้าม inference เอง
 - รวม 3 bullets ไม่เกิน 250 คำต่อข่าว
 - ห้ามใช้ - เป็น connector ให้ใช้ "โดย / ขณะที่ / ส่งผลให้" แทน
-- ใส่วงเล็บอธิบายเฉพาะ acronym และศัพท์เฉพาะทางที่คนทั่วไปไม่รู้จัก เช่น USDA (กระทรวงเกษตรสหรัฐฯ) ไม่ต้องใส่คำทั่วไปอย่างเงินเฟ้อ อัตราดอกเบี้ย หรือชื่อบริษัท/ดัชนี proper noun
-- หัวข้อข่าว: แปล Headline เป็นภาษาไทยทั้งหมดห้ามใช้ประโยคภาษาอังกฤษในหัวข้อ ยกเว้นคำเฉพาะเช่นชื่อบริษัท ชื่อหุ้น หรือศัพท์เทคนิคสามารถทับศัพท์ได้
+- ใส่วงเล็บอธิบายเฉพาะ acronym และศัพท์เฉพาะทางที่คนทั่วไปไม่รู้จัก
+- หัวข้อข่าว: แปลเป็นภาษาไทยทั้งหมด ยกเว้นคำเฉพาะเช่นชื่อบริษัท ชื่อหุ้น
 - URLs label: ใช้ headline จริงของบทความ ห้ามแต่งเอง
-- ภาพรวม 2-3 ประโยค ต้องระบุตัวเลขและชื่อหุ้นเฉพาะ เช่น "Dow ดิ่ง 620 จุดหลัง Iran โจมตี Kuwait"
+- ภาพรวมข่าว 2-3 ประโยค ต้องระบุตัวเลขและชื่อหุ้นเฉพาะ (ส่วนนี้คือสรุปข่าวเด่นเท่านั้น ไม่ต้องรวม market data)
 - เวลาที่แสดงใน time field ให้ใช้ค่า "Published (Thai)" ที่ส่งมาให้ตรงๆ ห้ามคำนวณหรือแปลงเองเด็ดขาด
 - ลำดับ section ตายตัว: market → economy → company
 
@@ -183,13 +303,13 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
 {
   "date_th": "วันX ที่X เดือน พ.ศ.",
   "date_slug": "YYYY-MM-DD",
-  "overview": "ภาพรวม 2-3 ประโยค",
+  "overview_news": "สรุปข่าวเด่น 2-3 ประโยค ระบุตัวเลขและชื่อหุ้นเฉพาะ",
   "news": [{
     "category": "market|company|economy",
-    "title": "headline จาก CNBC และเปลเป็นภาษาไทยทั้งหมด",
+    "title": "headline แปลเป็นภาษาไทย",
     "time": "X มิ.ย. 256X (HH:MM UTC = HH:MM น. ไทย)",
     "bullets": ["bullet1", "bullet2", "bullet3"],
-    "urls": [{ "url": "https://...", "label": "headline จริงของบทความภาษาอังกฤษตามที่ปรากฏใน article ห้ามแต่งเอง ห้ามใช้ชื่อ section หรือ category เช่น Options Action หรือ Mad Money" }]
+    "urls": [{ "url": "https://...", "label": "headline จริงของบทความภาษาอังกฤษ" }]
   }]
 }`;
 
@@ -205,7 +325,6 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
   try {
     return JSON.parse(text);
   } catch(e) {
-    // ถ้า JSON ไม่สมบูรณ์ให้ retry ด้วย max_tokens มากขึ้น
     const msg2 = await client.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 32000,
@@ -216,12 +335,11 @@ Tie-break: Fed ปรับ rate → economy, Apple earnings → company, Nasdaq
     const text2 = msg2.content[0].text.trim().replace(/^```json|```$/g, '').trim();
     return JSON.parse(text2);
   }
-
 }
 
-// ─── 4. สร้าง .docx พร้อม section headers ───────────────────────────────────
+// ─── 4. สร้าง .docx ──────────────────────────────────────────────────────────
 
-function buildDocx(data) {
+function buildDocx(data, marketData) {
   const BLUE = '1F3864', GRAY = '5F6368', SECTION_BG = 'EAF0FB';
 
   const hline = () => new Paragraph({
@@ -235,6 +353,47 @@ function buildDocx(data) {
     children: [new TextRun({ text: label, bold: true, size: 30, color: BLUE, font: 'TH Sarabun New' })],
   });
 
+  const subHeader = (label) => new Paragraph({
+    spacing: { before: 120, after: 40 },
+    children: [new TextRun({ text: label, bold: true, size: 22, color: BLUE, font: 'TH Sarabun New' })],
+  });
+
+  const bodyText = (text) => new Paragraph({
+    spacing: { before: 0, after: 60 },
+    children: [new TextRun({ text, size: 22, font: 'TH Sarabun New' })],
+  });
+
+  // ─── สร้าง Overview blocks ───────────────────────────────────────────────
+  const overviewBlocks = [];
+
+  // ดัชนีหลัก
+  overviewBlocks.push(subHeader('ดัชนีหลัก'));
+  const indexText = [
+    marketData.sp500 ? `ดัชนี S&P 500 ${marketData.sp500}` : '',
+    marketData.nasdaq ? `ดัชนี Nasdaq ${marketData.nasdaq}` : '',
+    marketData.dow ? `ดัชนี Dow Jones ${marketData.dow}` : '',
+  ].filter(Boolean).join(', ');
+  overviewBlocks.push(bodyText(indexText || '(ไม่สามารถดึงข้อมูลได้)'));
+
+  // อัตราผลตอบแทนพันธบัตร
+  overviewBlocks.push(subHeader('อัตราผลตอบแทนพันธบัตร'));
+  const yieldText = marketData.yield10y.value
+    ? `อัตราผลตอบแทนพันธบัตรรัฐบาลสหรัฐฯ อายุ 10 ปี ปรับตัว${marketData.yield10y.direction} ${marketData.yield10y.change} อยู่ที่ระดับ ${marketData.yield10y.value}`
+    : '(ไม่สามารถดึงข้อมูลได้)';
+  overviewBlocks.push(bodyText(yieldText));
+
+  // ผลตอบแทนรายกลุ่ม
+  overviewBlocks.push(subHeader('ผลตอบแทนรายกลุ่ม'));
+  const sectorText = marketData.sectors.upList
+    ? `หุ้น ${marketData.sectors.upCount} จาก 11 กลุ่มปรับตัวเพิ่มขึ้น ได้แก่ ${marketData.sectors.upList} โดยกลุ่มที่ปรับตัวเพิ่มขึ้นมากที่สุด คือ ${marketData.sectors.best} ส่วนกลุ่มที่ปรับตัวลดลงมากที่สุด คือ ${marketData.sectors.worst}`
+    : '(ไม่สามารถดึงข้อมูลได้)';
+  overviewBlocks.push(bodyText(sectorText));
+
+  // สรุปภาพรวมข่าว
+  overviewBlocks.push(subHeader('สรุปภาพรวมข่าว'));
+  overviewBlocks.push(bodyText(data.overview_news || data.overview || ''));
+
+  // ─── News blocks ─────────────────────────────────────────────────────────
   const SECTIONS = [
     { key: 'market',  label: 'ตลาด' },
     { key: 'company', label: 'บริษัท' },
@@ -284,7 +443,6 @@ function buildDocx(data) {
     return blocks;
   };
 
-  // Build grouped body
   let globalIndex = 0;
   const groupedBlocks = [];
   SECTIONS.forEach(({ key, label }) => {
@@ -313,8 +471,8 @@ function buildDocx(data) {
         new Paragraph({ heading: HeadingLevel.HEADING_1, children: [new TextRun({ text: 'Daily Market Brief', bold: true, size: 40, color: BLUE, font: 'TH Sarabun New' })] }),
         new Paragraph({ spacing: { before: 0, after: 80 }, children: [new TextRun({ text: data.date_th, size: 21, color: GRAY, font: 'TH Sarabun New' })] }),
         hline(),
-        new Paragraph({ spacing: { before: 160, after: 60 }, children: [new TextRun({ text: 'ภาพรวม', bold: true, size: 26, color: BLUE, font: 'TH Sarabun New' })] }),
-        new Paragraph({ spacing: { before: 0, after: 60 }, children: [new TextRun({ text: data.overview, size: 22, font: 'TH Sarabun New' })] }),
+        new Paragraph({ spacing: { before: 160, after: 80 }, children: [new TextRun({ text: 'ภาพรวม', bold: true, size: 26, color: BLUE, font: 'TH Sarabun New' })] }),
+        ...overviewBlocks,
         hline(),
         new Paragraph({ spacing: { before: 160, after: 100 }, children: [new TextRun({ text: 'ข่าวสำคัญประจำวัน', bold: true, size: 28, color: BLUE, font: 'TH Sarabun New' })] }),
         ...groupedBlocks,
@@ -372,19 +530,18 @@ async function main() {
   });
 
   try {
+    console.log('Step 0: Fetching market data...');
+    const marketData = await getMarketData(browser);
+
     console.log('Step 1: Opening cnbc.com/latest/...');
     const articleList = await getArticleList(browser);
     console.log(`Found ${articleList.length} articles (latest + trending)`);
 
-    // fetch ทุกบทความก่อน ห้ามกรองจาก headline
-    const nonPro = articleList
-      .filter(a => !a.isPro)
-      .slice(0, 40);
+    const nonPro = articleList.filter(a => !a.isPro).slice(0, 40);
     console.log('Step 2-3: Fetching ' + nonPro.length + ' articles...');
     const articles = await fetchArticlesParallel(browser, nonPro);
     articles.forEach(a => console.log(a.url, '|', a.publishedTime));
 
-    // กรอง Pro และ empty content ออกหลัง fetch
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const valid = articles
       .filter(a => {
@@ -405,11 +562,11 @@ async function main() {
       .sort((a, b) => new Date(b.publishedTime) - new Date(a.publishedTime));
     console.log(`Valid articles after fetch: ${valid.length}`);
 
-    const todayTh = new Date().toLocaleDateString('th-TH', { 
+    const todayTh = new Date().toLocaleDateString('th-TH', {
       timeZone: 'Asia/Bangkok',
       year: 'numeric', month: 'long', day: 'numeric', weekday: 'long'
     });
-    
+
     const articlesText = `วันที่ปัจจุบัน (ไทย): ${todayTh}\n\n` + valid.map(a =>
       `URL: ${a.url}\nHeadline: ${a.headline || a.title}\nPublished (UTC): ${a.publishedTime || a.time}\nPublished (Thai): ${utcToThaiTime(a.publishedTime)}\n\n${a.content}`
     ).join('\n\n---\n\n');
@@ -419,7 +576,7 @@ async function main() {
     console.log(`Got ${briefData.news.length} news items`);
 
     console.log('Step 5: Building .docx...');
-    const doc = buildDocx(briefData);
+    const doc = buildDocx(briefData, marketData);
     const buffer = await Packer.toBuffer(doc);
 
     console.log('Sending email...');
