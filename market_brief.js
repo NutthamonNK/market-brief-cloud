@@ -28,7 +28,7 @@ async function getArticleList(browser) {
     // ดึงจาก latest list
     document.querySelectorAll('a[href]').forEach(a => {
       const url = a.href;
-      if (!url.match(/cnbc\.com\/202\d\/\d{2}\/\d{2}\//)) return;
+      if (!url.match(/cnbc\.com\/202[56]\/\d{2}\/\d{2}\//)) return;
       if (seen.has(url)) return;
       seen.add(url);
 
@@ -86,7 +86,7 @@ async function getArticleList(browser) {
 async function getArticleContent(browser, article, retries = 1) {
   const page = await browser.newPage();
   try {
-    await page.goto(article.url, { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.goto(article.url, { waitUntil: 'networkidle', timeout: 30000 });
 
     const result = await page.evaluate(() => {
       // ดึง timestamp จาก meta tag (UTC แน่นอน)
