@@ -73,8 +73,11 @@ async function getMarketData(browser) {
     if (marketAll.bondChange) {
       const raw = parseFloat(marketAll.bondChange);
       const bps = raw * 100;
-      const sign = raw >= 0 ? '+' : '';
-      result.yield10y.change    = `${sign}${marketAll.bondChange} (${bps % 1 === 0 ? bps : bps.toFixed(1)} bps)`;
+      // ป้องกัน ++ กรณี bondChange มี + อยู่แล้ว
+      const changeStr = marketAll.bondChange.startsWith('+') || marketAll.bondChange.startsWith('-')
+        ? marketAll.bondChange
+        : (raw >= 0 ? '+' : '') + marketAll.bondChange;
+      result.yield10y.change    = `${changeStr} (${bps % 1 === 0 ? bps : bps.toFixed(1)} bps)`;
       result.yield10y.direction = raw >= 0 ? 'เพิ่มขึ้น' : 'ลดลง';
     }
     await page.close();
@@ -300,10 +303,14 @@ async function getArticleList(browser) {
 
 // ─── 2. Playwright: ดึง content + UTC timestamp ของแต่ละบทความ ───────────────
 
-async function getArticleContent(browser, article, retries = 1) {
+async function getArticleContent(browser, article, retries) {
+  if (retries === undefined) retries = article._retries ?? 1;
   const page = await browser.newPage();
+  const isLiveUpdate = /live.update|live-update/i.test(article.url);
   try {
-    await page.goto(article.url, { waitUntil: 'networkidle', timeout: 30000 });
+    // live update pages ต้องรอนานขึ้นเพราะ content โหลดช้า
+    await page.goto(article.url, { waitUntil: 'networkidle', timeout: isLiveUpdate ? 45000 : 30000 });
+    if (isLiveUpdate) await page.waitForTimeout(3000);
 
     const result = await page.evaluate(() => {
       const metaTime = document.querySelector('meta[property="article:published_time"]')?.content
@@ -697,7 +704,11 @@ async function main() {
 
     const nonPro = articleList.filter(a => !a.isPro).slice(0, 40);
     console.log('Step 2-3: Fetching ' + nonPro.length + ' articles...');
-    const articles = await fetchArticlesParallel(browser, nonPro);
+    // live update pages ได้ retries เพิ่มเป็น 2 ครั้ง
+    const articles = await fetchArticlesParallel(browser, nonPro.map(a => ({
+      ...a,
+      _retries: /live.update|live-update/i.test(a.url) ? 2 : 1,
+    })));
     articles.forEach(a => console.log(a.url, '|', a.publishedTime));
 
     const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
