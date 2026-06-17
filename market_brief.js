@@ -71,9 +71,11 @@ async function getMarketData(browser) {
     result.dow    = marketAll.djia   || null;
     result.yield10y.value = marketAll.bondValue ? marketAll.bondValue + '%' : '';
     if (marketAll.bondChange) {
-      const bps = Math.round(parseFloat(marketAll.bondChange) * 100);
-      result.yield10y.change    = Math.abs(bps) + ' bps';
-      result.yield10y.direction = bps >= 0 ? 'เพิ่มขึ้น' : 'ลดลง';
+      const raw = parseFloat(marketAll.bondChange);
+      const bps = raw * 100;
+      const sign = raw >= 0 ? '+' : '';
+      result.yield10y.change    = `${sign}${marketAll.bondChange} (${bps % 1 === 0 ? bps : bps.toFixed(1)} bps)`;
+      result.yield10y.direction = raw >= 0 ? 'เพิ่มขึ้น' : 'ลดลง';
     }
     await page.close();
     console.log('S&P 500:', marketAll.sp500  ? `${marketAll.sp500.last} | change: ${marketAll.sp500.chg} (${marketAll.sp500.pct})`   : 'NOT FOUND');
@@ -169,22 +171,27 @@ async function getMarketData(browser) {
     await page.waitForTimeout(3000);
     const cnbcSectors = await page.evaluate(() => {
       const cnbcSectorMap = {
-        'TECHNOLOGY': 'Information Technology', 'ENERGY': 'Energy',
-        'FINANCIALS': 'Financials', 'UTILITIES': 'Utilities',
-        'INDUSTRIALS': 'Industrials', 'MATERIALS': 'Materials',
-        'HEALTH': 'Health Care', 'CONS STPL': 'Consumer Staples',
-        'CONS DISC': 'Consumer Discretionary',
-        'COMMUNICATION SVS': 'Communication Services', 'REAL ESTATE': 'Real Estate',
+        'TECHNOLOGY':        { name: 'Information Technology', etf: 'XLK' },
+        'ENERGY':            { name: 'Energy',                 etf: 'XLE' },
+        'FINANCIALS':        { name: 'Financials',             etf: 'XLF' },
+        'UTILITIES':         { name: 'Utilities',              etf: 'XLU' },
+        'INDUSTRIALS':       { name: 'Industrials',            etf: 'XLI' },
+        'MATERIALS':         { name: 'Materials',              etf: 'XLB' },
+        'HEALTH':            { name: 'Health Care',            etf: 'XLV' },
+        'CONS STPL':         { name: 'Consumer Staples',       etf: 'XLP' },
+        'CONS DISC':         { name: 'Consumer Discretionary', etf: 'XLY' },
+        'COMMUNICATION SVS': { name: 'Communication Services', etf: 'XLC' },
+        'REAL ESTATE':       { name: 'Real Estate',            etf: 'XLRE' },
       };
       const lines = document.body.innerText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
       const results = [];
       lines.forEach((line, i) => {
-        const name = cnbcSectorMap[line.trim().toUpperCase()];
-        if (!name) return;
+        const sector = cnbcSectorMap[line.trim().toUpperCase()];
+        if (!sector) return;
         const parts = (lines[i + 1] || '').split('\t');
         if (parts.length >= 3) {
           const m = parts[2].trim().match(/^([+-]?\d+\.?\d*)$/);
-          if (m) results.push({ name, ticker: line.trim(), daily: parseFloat(m[1]), last: parts[0].trim() });
+          if (m) results.push({ name: sector.name, ticker: sector.etf, daily: parseFloat(m[1]), last: parts[0].trim() });
         }
       });
       return results;
