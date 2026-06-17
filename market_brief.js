@@ -358,13 +358,14 @@ async function summarizeWithClaude(articlesText) {
 
 ## กฎการกรอง
 - รับเฉพาะบทความที่เผยแพร่ภายใน 24 ชั่วโมงก่อนรัน บทความเก่ากว่านั้นตัดออก
-- ต้องเขียนสรุปบทความที่ได้รับทุกบทความ ไม่มีข้อยกเว้น จำนวน news items ใน output JSON ต้องเท่ากับจำนวนบทความที่ได้รับ
-ยกเว้นเฉพาะ: Sports, Lifestyle ล้วนๆ, Entertainment ล้วนๆ, Mad Money/Cramer/CNBC Pro/CNBC Club
+- ต้องเขียนสรุปบทความที่ได้รับทุกบทความ ยกเว้นเฉพาะ: Sports, Lifestyle ล้วนๆ, Entertainment ล้วนๆ, Mad Money/Cramer/CNBC Pro/CNBC Club
 - ทุกอย่างนอกจาก 4 ประเภทนี้ → เก็บทั้งหมด ห้ามตัดเพราะคิดเองว่าไม่สำคัญ ไม่เกี่ยวการเงิน หรือเป็น opinion
+- บทความที่รวมกันได้ตามกฎการรวมข่าว → นับเป็น 1 ข่าว (จำนวน news items อาจน้อยกว่าจำนวนบทความที่รับมา)
 - opinion ของนักวิเคราะห์สามารถอยู่ใน bullets ได้ แต่ต้องเป็นส่วนประกอบของข่าวจริง
 
 ## กฎการรวมข่าว
 - รวมได้เฉพาะ same actor + same event เท่านั้น
+- ห้ามรวมข่าว central bank policy (Fed, BOJ, ECB ฯลฯ) กับข่าวตลาด (ดัชนี, หุ้น) แม้จะเกิดวันเดียวกัน เพราะเป็นคนละ actor และคนละ event — ต้องแยกเป็นคนละข่าวเสมอ
 - เมื่อรวม ให้ระบุ timestamp แยกกันในช่อง time และรวม URL ทั้งหมดไว้ใน urls
 - ถ้าบทความที่รวมเป็น escalation หรือเหตุการณ์ต่อเนื่อง ให้เรียง context ตามลำดับเวลาจากเก่าไปใหม่เสมอ
 - บทความที่มี update ให้ใช้ version update เป็นหลัก timestamp ใช้ของ update นั้น
@@ -376,6 +377,7 @@ async function summarizeWithClaude(articlesText) {
 - "economy": GDP, CPI, jobs report, PMI, trade data, นโยบาย central bank, geopolitics ที่กระทบ macro
 
 ## กฎการเขียน
+
 - ภาษาไทย เขียนเหมือนอัปเดตงานให้ผู้ใหญ่ฟัง กระชับ ตรงประเด็น
 - 3 bullets ต่อข่าว ห้ามขึ้นต้น bullet ด้วย label
   - bullet 1: เกิดอะไรขึ้น ใคร ทำอะไร ตัวเลขคืออะไร
