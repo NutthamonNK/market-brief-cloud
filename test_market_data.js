@@ -160,6 +160,34 @@ async function testMarketData() {
     console.error('TEST 2 ERROR:', e.message);
   }
 
+  // ─── TEST 3: cnbc.com/markets/sectors/ ──────────────────────────────────
+  console.log('\n==============================');
+  console.log('TEST 3: cnbc.com/markets/sectors/');
+  console.log('==============================');
+  try {
+    const page = await browser.newPage();
+    await page.goto('https://www.cnbc.com/markets/sectors/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(3000);
+
+    const raw = await page.evaluate(() => document.body.innerText);
+
+    console.log('\n--- RAW TEXT (first 3000 chars) ---');
+    console.log(raw.substring(0, 3000));
+
+    // หาบรรทัดที่มี sector names หรือ %
+    console.log('\n--- LINES containing sector names or % ---');
+    const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+    lines.forEach((line, i) => {
+      if (/Technology|Energy|Financials|Utilities|Industrials|Materials|Health|Consumer|Communication|Real Estate|%/i.test(line)) {
+        console.log(`Line ${i}: [${line}]`);
+      }
+    });
+
+    await page.close();
+  } catch (e) {
+    console.error('TEST 3 ERROR:', e.message);
+  }
+
   await browser.close();
   console.log('\nDone.');
 }
