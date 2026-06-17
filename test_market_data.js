@@ -37,26 +37,35 @@ async function testMarketData() {
     const result = await page.evaluate(() => {
       const lines = document.body.innerText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-      const findPctAfter = (keyword) => {
+      // format จริง: "DJIA" บรรทัด N, "51,999.67\t+328.64\t+0.64" บรรทัด N+1
+      const findPctAfterTabLine = (keyword) => {
         const idx = lines.findIndex(l => l.toUpperCase() === keyword.toUpperCase());
         if (idx === -1) return '';
-        for (let i = idx + 1; i < Math.min(idx + 6, lines.length); i++) {
-          const m = lines[i].match(/^([+-]\d+\.?\d*%)$/);
-          if (m) return m[1];
+        const next = lines[idx + 1] || '';
+        // tab-separated: LAST\tCHG\t%CHG
+        const parts = next.split('\t');
+        if (parts.length >= 3) {
+          const pct = parts[parts.length - 1].trim();
+          if (/^[+-]?\d+\.?\d*$/.test(pct)) return (parseFloat(pct) >= 0 ? '+' : '') + pct + '%';
         }
         return '';
       };
 
-      const sp500  = findPctAfter('S&P 500');
-      const nasdaq = findPctAfter('NASDAQ');
-      const djia   = findPctAfter('DJIA');
+      // ดึงจาก AMERICAS MARKETS section (Line 188+) ที่มี tab-separated
+      const sp500  = findPctAfterTabLine('S&P 500');
+      const nasdaq = findPctAfterTabLine('NASDAQ');
+      const djia   = findPctAfterTabLine('DJIA');
 
-      // Bond Yield: "US 10-YR" / yield บรรทัด+1 / change บรรทัด+2
+      // Bond Yield: "US 10-YR" / "4.441\t+0.013" tab-separated บรรทัดถัดไป
       let bondValue = '', bondChange = '';
       const bondIdx = lines.findIndex(l => /^US\s*10-YR$/i.test(l));
       if (bondIdx !== -1) {
-        if (lines[bondIdx + 1] && /^\d+\.\d+$/.test(lines[bondIdx + 1])) bondValue = lines[bondIdx + 1];
-        if (lines[bondIdx + 2] && /^[+-]\d+\.\d+$/.test(lines[bondIdx + 2])) bondChange = lines[bondIdx + 2];
+        const next = lines[bondIdx + 1] || '';
+        const parts = next.split('\t');
+        if (parts.length >= 2) {
+          bondValue  = parts[0].trim();
+          bondChange = parts[1].trim();
+        }
       }
 
       return { sp500, nasdaq, djia, bondValue, bondChange };
@@ -103,7 +112,8 @@ async function testMarketData() {
       // ดึงวันที่ล่าสุดจาก "Last Price ($)" column
       let lastPriceDate = '';
       const allText = document.body.innerText;
-      const dateMatch = allText.match(/Last Price[^\n]*\n([A-Z][a-z]{2}\s+\d{1,2}\s+\d{4})/);
+      const dateMatch = allText.match(/Last Price[^\n]*\n([A-Z][a-z]{2}\s+\d{1,2}\s+\d{4})/)
+        || allText.match(/([A-Z][a-z]{2}\s+\d{1,2}\s+\d{4})/);
       if (dateMatch) lastPriceDate = dateMatch[1];
 
       lines.forEach((line, i) => {
