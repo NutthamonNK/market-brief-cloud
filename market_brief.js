@@ -10,8 +10,14 @@ const {
 // ─── 0. Playwright: ดึง Market Data จาก 2 แหล่ง ────────────────────────────
 
 async function getMarketData(browser) {
+  // บันทึก timestamp ตอนเริ่ม getMarketData() (เวลาไทย)
+  const _now = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+  const _thM = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
+  const _fetchedAt = `${_now.getUTCDate()} ${_thM[_now.getUTCMonth()]} ${_now.getUTCFullYear() + 543} เวลา ${String(_now.getUTCHours()).padStart(2,'0')}:${String(_now.getUTCMinutes()).padStart(2,'0')} น.`;
+
   const result = {
     sp500: '', nasdaq: '', dow: '',
+    fetchedAt: _fetchedAt, // timestamp ตอนเริ่มดึงข้อมูล
     yield10y: { value: '', change: '', direction: '' },
     sectors: { upCount: 0, upList: '', best: '', worst: '', dateTh: '', table: [] },
     // table: [{ name, daily, weekly }] เรียงตาม daily change
@@ -110,11 +116,17 @@ async function getMarketData(browser) {
         const ticker = line.trim();
         if (!sectorMap[ticker]) return;
         const name = sectorMap[ticker];
+        // format: XLK / "Information Technology\t191.79\t184.80\t+6.99" / "+3.78"
+        // last price อยู่บรรทัด i+1 หลัง tab แรก
+        let lastPrice = '';
+        const nextLine = lines[i + 1] || '';
+        const parts = nextLine.split('\t');
+        if (parts.length >= 2) lastPrice = parts[1].trim(); // index 1 = Last Price
         // หา % change ใน 3 บรรทัดถัดไป รูปแบบ "+3.78" หรือ "-3.48"
         for (let j = i + 1; j < Math.min(i + 4, lines.length); j++) {
           const m = lines[j].match(/^([+-]\d+\.\d+)$/);
           if (m) {
-            results.push({ name, ticker, change: parseFloat(m[1]) });
+            results.push({ name, ticker, change: parseFloat(m[1]), lastPrice });
             break;
           }
         }
@@ -138,7 +150,10 @@ async function getMarketData(browser) {
         const [mon, day, year] = lastPriceDate.split(' ');
         sectorDateTh = `${parseInt(day)} ${thMonths[mon] || mon} ${parseInt(year) + 543}`;
       }
-      result.sectors = { upCount: up.length, upList, best, worst, dateTh: sectorDateTh };
+      // เก็บ weeklyMap ไว้สำหรับ merge กับ CNBC daily ทีหลัง
+      const weeklyMap = {};
+      sectors.forEach(s => { weeklyMap[s.name] = { change: s.change, last: s.lastPrice || '' }; });
+      result.sectors = { upCount: up.length, upList, best, worst, dateTh: sectorDateTh, weeklyMap, table: [] };
     }
     await page.close();
     console.log('Sectors (weekly):', result.sectors.upCount, 'up,', result.sectors.best, '/', result.sectors.worst);
@@ -169,7 +184,7 @@ async function getMarketData(browser) {
         const parts = (lines[i + 1] || '').split('\t');
         if (parts.length >= 3) {
           const m = parts[2].trim().match(/^([+-]?\d+\.?\d*)$/);
-          if (m) results.push({ name, daily: parseFloat(m[1]) });
+          if (m) results.push({ name, ticker: line.trim(), daily: parseFloat(m[1]), last: parts[0].trim() });
         }
       });
       return results;
@@ -178,24 +193,22 @@ async function getMarketData(browser) {
 
     // merge daily + weekly เข้า table เรียงตาม daily
     if (cnbcSectors.length > 0) {
-      // สร้าง weekly map จาก result.sectors ที่ดึงมาแล้ว
-      const weeklyMap = {};
-      // parse จาก upList + worst
-      const allSectorStr = result.sectors.upList + ', ' + result.sectors.worst;
-      allSectorStr.split(',').forEach(s => {
-        const m = s.trim().match(/^(.+?)\s([+-]\d+\.\d+)%$/);
-        if (m) weeklyMap[m[1].trim()] = parseFloat(m[2]);
-      });
+      // ใช้ weeklyMap ที่เก็บไว้ใน result.sectors.weeklyMap โดยตรง
+      const weeklyMap = result.sectors.weeklyMap || {};
 
       const upDaily   = cnbcSectors.filter(s => s.daily > 0).sort((a, b) => b.daily - a.daily);
       const downDaily = cnbcSectors.filter(s => s.daily <= 0).sort((a, b) => a.daily - b.daily);
       const allSorted = [...upDaily, ...downDaily];
 
-      result.sectors.table    = allSorted.map(s => ({
-        name:    s.name,
-        daily:   (s.daily > 0 ? '+' : '') + s.daily.toFixed(2) + '%',
-        weekly:  weeklyMap[s.name] !== undefined ? (weeklyMap[s.name] > 0 ? '+' : '') + weeklyMap[s.name].toFixed(2) + '%' : '-',
-      }));
+      result.sectors.table    = allSorted.map(s => {
+        const w = weeklyMap[s.name];
+        const dailySign = s.daily > 0 ? '+' : '';
+        return {
+          sector:  `${s.name} (${s.ticker})`,
+          daily:   `${s.last} (${dailySign}${s.daily.toFixed(2)}%)`,
+          weekly:  w ? `${w.last} (${w.change > 0 ? '+' : ''}${w.change.toFixed(2)}%)` : '-',
+        };
+      });
       result.sectors.upCount  = upDaily.length;
       result.sectors.best     = upDaily[0]   ? upDaily[0].name   + ' ' + (upDaily[0].daily > 0 ? '+' : '')   + upDaily[0].daily.toFixed(2)   + '%' : '';
       result.sectors.worst    = downDaily[0] ? downDaily[0].name + ' ' + downDaily[0].daily.toFixed(2) + '%' : '';
@@ -259,7 +272,7 @@ async function getArticleList(browser) {
     });
     document.querySelectorAll('a').forEach(a => {
       const p = a.closest('[class*="trending"],[class*="Trending"]');
-      if (p && a.href && a.href.match(/cnbc\.com\/202\d\/\d{2}\/\d{2}\//)) {
+      if (p && a.href && a.href.match(/cnbc\.com\/20\d{2}\/\d{2}\/\d{2}\//)) {
         trendingUrls.add(a.href);
       }
     });
@@ -466,7 +479,7 @@ function buildDocx(data, marketData) {
 
   if (marketData.sectors.table && marketData.sectors.table.length > 0) {
     // สรุป 1 ประโยค
-    const summaryText = `หุ้น ${marketData.sectors.upCount} จาก 11 กลุ่มปรับตัวเพิ่มขึ้น โดยกลุ่มที่ปรับตัวเพิ่มขึ้นมากที่สุด คือ ${marketData.sectors.best} ส่วนกลุ่มที่ปรับตัวลดลงมากที่สุด คือ ${marketData.sectors.worst}`;
+    const summaryText = sanitize(`หุ้น ${marketData.sectors.upCount} จาก 11 กลุ่มปรับตัวเพิ่มขึ้น โดยกลุ่มที่ปรับตัวเพิ่มขึ้นมากที่สุด คือ ${marketData.sectors.best} ส่วนกลุ่มที่ปรับตัวลดลงมากที่สุด คือ ${marketData.sectors.worst}`);
     overviewBlocks.push(bodyText(summaryText));
 
     // ตาราง sector
@@ -503,10 +516,10 @@ function buildDocx(data, marketData) {
           makeCell(weeklyHeader,   true, null, COL3),
         ]}),
         ...marketData.sectors.table.map(s => {
-          const isUpDaily  = s.daily.startsWith('+');
-          const isUpWeekly = s.weekly !== '-' && s.weekly.startsWith('+');
+          const isUpDaily  = s.daily.includes('(+');
+          const isUpWeekly = s.weekly !== '-' && s.weekly.includes('(+');
           return new TableRow({ children: [
-            makeCell(s.name,   false, null,             COL1),
+            makeCell(s.sector, false, null, COL1),
             makeCell(s.daily,  false, isUpDaily,        COL2),
             makeCell(s.weekly, false, s.weekly === '-' ? null : isUpWeekly, COL3),
           ]});
@@ -515,13 +528,19 @@ function buildDocx(data, marketData) {
     });
     overviewBlocks.push(sectorTable);
     overviewBlocks.push(new Paragraph({ spacing: { before: 60, after: 0 }, children: [] }));
+    if (marketData.fetchedAt) {
+      overviewBlocks.push(new Paragraph({
+        spacing: { before: 0, after: 60 },
+        children: [new TextRun({ text: `(ดึงข้อมูล ณ ${marketData.fetchedAt})`, size: 18, color: GRAY, italics: true, font: 'TH Sarabun New' })],
+      }));
+    }
   } else {
     overviewBlocks.push(bodyText('(ไม่สามารถดึงข้อมูลได้)'));
   }
 
   // สรุปภาพรวมข่าว
   overviewBlocks.push(subHeader('สรุปภาพรวมข่าว'));
-  overviewBlocks.push(bodyText(data.overview_news || data.overview || ''));
+  overviewBlocks.push(bodyText(sanitize(data.overview_news || data.overview || '')));
 
   // ─── News blocks ─────────────────────────────────────────────────────────
   const SECTIONS = [
@@ -553,7 +572,7 @@ function buildDocx(data, marketData) {
         spacing: { before: 60, after: 60 },
         children: [linkLabel, new ExternalHyperlink({
           link: item.urls[0].url,
-          children: [new TextRun({ text: item.urls[0].label, size: 18, color: '1A73E8', underline: {}, font: 'TH Sarabun New' })],
+          children: [new TextRun({ text: sanitize(item.urls[0].label), size: 18, color: '1A73E8', underline: {}, font: 'TH Sarabun New' })],
         })],
       }));
     } else {
@@ -564,7 +583,7 @@ function buildDocx(data, marketData) {
           new TextRun({ text: '   - ', size: 18, color: GRAY, font: 'TH Sarabun New' }),
           new ExternalHyperlink({
             link: u.url,
-            children: [new TextRun({ text: u.label, size: 18, color: '1A73E8', underline: {}, font: 'TH Sarabun New' })],
+            children: [new TextRun({ text: sanitize(u.label), size: 18, color: '1A73E8', underline: {}, font: 'TH Sarabun New' })],
           }),
         ],
       })));
