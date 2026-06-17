@@ -474,7 +474,7 @@ function buildDocx(data, marketData) {
       const color = isHeader ? BLUE : (isUp === true ? '1A7340' : isUp === false ? 'C0392B' : '000000');
       const fill  = isHeader ? 'EAF0FB' : 'FFFFFF';
       return new TableCell({
-        shading: { fill, type: ShadingType.CLEAR, color: 'auto' },
+        shading: { fill, type: 'clear', color: 'auto' },
         children: [new Paragraph({
           spacing: { before: 40, after: 40 },
           children: [new TextRun({ text, bold: isHeader, size: 18, color, font: 'TH Sarabun New' })],
