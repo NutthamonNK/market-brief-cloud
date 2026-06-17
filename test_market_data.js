@@ -174,17 +174,50 @@ async function testMarketData() {
     console.log('\n--- RAW TEXT (first 3000 chars) ---');
     console.log(raw.substring(0, 3000));
 
-    // แสดง sector lines + 2 บรรทัดถัดไป
-    console.log('\n--- SECTOR LINES + context ---');
+    // parse sector daily %change จาก CNBC
+    console.log('\n--- CNBC SECTOR DAILY %CHANGE ---');
     const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+    const cnbcSectorMap = {
+      'TECHNOLOGY': 'Information Technology',
+      'ENERGY': 'Energy',
+      'FINANCIALS': 'Financials',
+      'UTILITIES': 'Utilities',
+      'INDUSTRIALS': 'Industrials',
+      'MATERIALS': 'Materials',
+      'HEALTH': 'Health Care',
+      'CONS STPL': 'Consumer Staples',
+      'CONS DISC': 'Consumer Discretionary',
+      'COMMUNICATION SVS': 'Communication Services',
+      'REAL ESTATE': 'Real Estate',
+    };
+
+    const cnbcSectors = [];
     lines.forEach((line, i) => {
-      if (/^(TECHNOLOGY|ENERGY|FINANCIALS|UTILITIES|INDUSTRIALS|MATERIALS|HEALTH|CONS STPL|CONS DISC|COMMUNICATION SVS|REAL ESTATE)$/i.test(line)) {
-        for (let j = i; j < Math.min(i + 4, lines.length); j++) {
-          console.log(`  [${j}] ${lines[j]}`);
-        }
-        console.log('  ---');
+      const name = cnbcSectorMap[line.trim().toUpperCase()];
+      if (!name) return;
+      const next = lines[i + 1] || '';
+      const parts = next.split('\t');
+      // format: PRICE / CHANGE / %CHANGE / LOW / HIGH / PREV CLOSE
+      if (parts.length >= 3) {
+        const pctRaw = parts[2].trim();
+        const m = pctRaw.match(/^([+-]?\d+\.?\d*)$/);
+        if (m) cnbcSectors.push({ name, pct: parseFloat(m[1]) });
       }
     });
+
+    const upDaily   = cnbcSectors.filter(s => s.pct > 0).sort((a, b) => b.pct - a.pct);
+    const downDaily = cnbcSectors.filter(s => s.pct < 0).sort((a, b) => a.pct - b.pct);
+    const allSorted = [...upDaily, ...downDaily];
+
+    console.log('\nAll sectors (best → worst):');
+    allSorted.forEach(s => {
+      const sign = s.pct > 0 ? '+' : '';
+      console.log(`  ${s.name}: ${sign}${s.pct}%`);
+    });
+    console.log(`\nUp (${upDaily.length}) / Down (${downDaily.length})`);
+    console.log(`Best daily:  ${upDaily[0]   ? upDaily[0].name   + ' +' + upDaily[0].pct   + '%' : 'N/A'}`);
+    console.log(`Worst daily: ${downDaily[0] ? downDaily[0].name + ' '  + downDaily[0].pct + '%' : 'N/A'}`);
 
     await page.close();
   } catch (e) {
