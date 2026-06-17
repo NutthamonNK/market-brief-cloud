@@ -174,12 +174,15 @@ async function testMarketData() {
     console.log('\n--- RAW TEXT (first 3000 chars) ---');
     console.log(raw.substring(0, 3000));
 
-    // หาบรรทัดที่มี sector names หรือ %
-    console.log('\n--- LINES containing sector names or % ---');
+    // แสดง sector lines + 2 บรรทัดถัดไป
+    console.log('\n--- SECTOR LINES + context ---');
     const lines = raw.split('\n').map(l => l.trim()).filter(l => l.length > 0);
     lines.forEach((line, i) => {
-      if (/Technology|Energy|Financials|Utilities|Industrials|Materials|Health|Consumer|Communication|Real Estate|%/i.test(line)) {
-        console.log(`Line ${i}: [${line}]`);
+      if (/^(TECHNOLOGY|ENERGY|FINANCIALS|UTILITIES|INDUSTRIALS|MATERIALS|HEALTH|CONS STPL|CONS DISC|COMMUNICATION SVS|REAL ESTATE)$/i.test(line)) {
+        for (let j = i; j < Math.min(i + 4, lines.length); j++) {
+          console.log(`  [${j}] ${lines[j]}`);
+        }
+        console.log('  ---');
       }
     });
 
