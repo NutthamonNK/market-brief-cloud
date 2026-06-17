@@ -37,24 +37,20 @@ async function testMarketData() {
     const result = await page.evaluate(() => {
       const lines = document.body.innerText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-      // format จริง: "DJIA" บรรทัด N, "51,999.67\t+328.64\t+0.64" บรรทัด N+1
-      const findPctAfterTabLine = (keyword) => {
+      // format จริง: ชื่อ / LAST / CHG / %CHG แต่ละบรรทัด
+      // S&P 500 → +3 บรรทัด = %CHG
+      const findPctAt = (keyword, offset) => {
         const idx = lines.findIndex(l => l.toUpperCase() === keyword.toUpperCase());
         if (idx === -1) return '';
-        const next = lines[idx + 1] || '';
-        // tab-separated: LAST\tCHG\t%CHG
-        const parts = next.split('\t');
-        if (parts.length >= 3) {
-          const pct = parts[parts.length - 1].trim();
-          if (/^[+-]?\d+\.?\d*$/.test(pct)) return (parseFloat(pct) >= 0 ? '+' : '') + pct + '%';
-        }
-        return '';
+        const val = (lines[idx + offset] || '').trim();
+        const m = val.match(/^([+-]?\d+\.?\d*)$/);
+        if (!m) return '';
+        return (parseFloat(m[1]) >= 0 ? '+' : '') + m[1] + '%';
       };
 
-      // ดึงจาก AMERICAS MARKETS section (Line 188+) ที่มี tab-separated
-      const sp500  = findPctAfterTabLine('S&P 500');
-      const nasdaq = findPctAfterTabLine('NASDAQ');
-      const djia   = findPctAfterTabLine('DJIA');
+      const sp500  = findPctAt('S&P 500', 3);
+      const nasdaq = findPctAt('NASDAQ', 3);
+      const djia   = findPctAt('DJIA', 3);
 
       // Bond Yield: "US 10-YR" / "4.441\t+0.013" tab-separated บรรทัดถัดไป
       let bondValue = '', bondChange = '';
