@@ -38,19 +38,25 @@ async function testMarketData() {
       const lines = document.body.innerText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
       // format จริง: ชื่อ / LAST / CHG / %CHG แต่ละบรรทัด
-      // S&P 500 → +3 บรรทัด = %CHG
-      const findPctAt = (keyword, offset) => {
-        const idx = lines.findIndex(l => l.toUpperCase() === keyword.toUpperCase());
-        if (idx === -1) return '';
-        const val = (lines[idx + offset] || '').trim();
-        const m = val.match(/^([+-]?\d+\.?\d*)$/);
-        if (!m) return '';
-        return (parseFloat(m[1]) >= 0 ? '+' : '') + m[1] + '%';
+      const findIndex = (keyword) => lines.findIndex(l => l.toUpperCase() === keyword.toUpperCase());
+
+      const getIndexData = (keyword) => {
+        const idx = findIndex(keyword);
+        if (idx === -1) return null;
+        const last   = (lines[idx + 1] || '').trim();
+        const chg    = (lines[idx + 2] || '').trim();
+        const pctRaw = (lines[idx + 3] || '').trim();
+        const m = pctRaw.match(/^([+-]?\d+\.?\d*)$/);
+        if (!m) return null;
+        const num  = parseFloat(m[1]);
+        const sign = pctRaw.startsWith('+') || pctRaw.startsWith('-') ? '' : (num >= 0 ? '+' : '');
+        const pct  = sign + pctRaw + '%';
+        return { last, chg, pct };
       };
 
-      const sp500  = findPctAt('S&P 500', 3);
-      const nasdaq = findPctAt('NASDAQ', 3);
-      const djia   = findPctAt('DJIA', 3);
+      const sp500  = getIndexData('S&P 500');
+      const nasdaq = getIndexData('NASDAQ');
+      const djia   = getIndexData('DJIA');
 
       // Bond Yield: "US 10-YR" / "4.441\t+0.013" tab-separated บรรทัดถัดไป
       let bondValue = '', bondChange = '';
@@ -64,16 +70,19 @@ async function testMarketData() {
         }
       }
 
-      return { sp500, nasdaq, djia, bondValue, bondChange };
+      return { sp500, nasdaq, djia, bondValue, bondChange };  // sp500/nasdaq/djia เป็น object {last, chg, pct}
     });
 
     console.log('\n--- RESULT ---');
-    console.log('S&P 500:  ', result.sp500  || 'NOT FOUND');
-    console.log('NASDAQ:   ', result.nasdaq || 'NOT FOUND');
-    console.log('DJIA:     ', result.djia   || 'NOT FOUND');
+    const fmtIndex = (name, d) => d
+      ? `${name}: ${d.last} | change: ${d.chg} (${d.pct})`
+      : `${name}: NOT FOUND`;
+    console.log(fmtIndex('S&P 500', result.sp500));
+    console.log(fmtIndex('NASDAQ ', result.nasdaq));
+    console.log(fmtIndex('DJIA   ', result.djia));
     if (result.bondValue) {
       const bps = result.bondChange ? Math.round(parseFloat(result.bondChange) * 100) : null;
-      const bpsStr = bps !== null ? ` | change: ${result.bondChange} (${bps >= 0 ? '+' : ''}${bps} bps) | ${bps >= 0 ? 'เพิ่มขึ้น' : 'ลดลง'}` : '';
+      const bpsStr = bps !== null ? ` | change: ${result.bondChange} (${bps >= 0 ? '+' : ''}${bps} bps)` : '';
       console.log(`US 10-YR: ${result.bondValue}%${bpsStr}`);
     } else {
       console.log('US 10-YR: NOT FOUND');
