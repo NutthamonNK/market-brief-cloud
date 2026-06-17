@@ -4,6 +4,7 @@ const nodemailer = require('nodemailer');
 const {
   Document, Packer, Paragraph, TextRun, AlignmentType,
   HeadingLevel, LevelFormat, BorderStyle, ExternalHyperlink,
+  Table, TableRow, TableCell, WidthType, ShadingType,
 } = require('docx');
 
 // ─── 0. Playwright: ดึง Market Data จาก 2 แหล่ง ────────────────────────────
@@ -12,7 +13,8 @@ async function getMarketData(browser) {
   const result = {
     sp500: '', nasdaq: '', dow: '',
     yield10y: { value: '', change: '', direction: '' },
-    sectors: { upCount: 0, upList: '', best: '', worst: '' },
+    sectors: { upCount: 0, upList: '', best: '', worst: '', dateTh: '', table: [] },
+    // table: [{ name, daily, weekly }] เรียงตาม daily change
   };
 
   // 0.1 ดัชนีหลัก + Bond Yield — cnbc.com/markets/
@@ -57,10 +59,10 @@ async function getMarketData(browser) {
       return { sp500, nasdaq, djia, bondValue, bondChange };
     });
 
-    // เก็บทั้ง last, chg, pct สำหรับใช้ใน docx
-    result.sp500  = marketAll.sp500  ? marketAll.sp500.pct  : '';
-    result.nasdaq = marketAll.nasdaq ? marketAll.nasdaq.pct : '';
-    result.dow    = marketAll.djia   ? marketAll.djia.pct   : '';
+    // เก็บ object เต็ม { last, chg, pct } สำหรับใช้ใน docx
+    result.sp500  = marketAll.sp500  || null;
+    result.nasdaq = marketAll.nasdaq || null;
+    result.dow    = marketAll.djia   || null;
     result.yield10y.value = marketAll.bondValue ? marketAll.bondValue + '%' : '';
     if (marketAll.bondChange) {
       const bps = Math.round(parseFloat(marketAll.bondChange) * 100);
@@ -139,9 +141,68 @@ async function getMarketData(browser) {
       result.sectors = { upCount: up.length, upList, best, worst, dateTh: sectorDateTh };
     }
     await page.close();
-    console.log('Sectors:', result.sectors);
+    console.log('Sectors (weekly):', result.sectors.upCount, 'up,', result.sectors.best, '/', result.sectors.worst);
   } catch (e) {
     console.error('getMarketData sector error:', e.message);
+  }
+
+  // 0.3 Sector Daily — cnbc.com/markets/sectors/
+  // format: "TECHNOLOGY" / "6742.74\t-160.23\t-2.32\t..." tab-separated
+  try {
+    const page = await browser.newPage();
+    await page.goto('https://www.cnbc.com/markets/sectors/', { waitUntil: 'domcontentloaded', timeout: 30000 });
+    await page.waitForTimeout(3000);
+    const cnbcSectors = await page.evaluate(() => {
+      const cnbcSectorMap = {
+        'TECHNOLOGY': 'Information Technology', 'ENERGY': 'Energy',
+        'FINANCIALS': 'Financials', 'UTILITIES': 'Utilities',
+        'INDUSTRIALS': 'Industrials', 'MATERIALS': 'Materials',
+        'HEALTH': 'Health Care', 'CONS STPL': 'Consumer Staples',
+        'CONS DISC': 'Consumer Discretionary',
+        'COMMUNICATION SVS': 'Communication Services', 'REAL ESTATE': 'Real Estate',
+      };
+      const lines = document.body.innerText.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+      const results = [];
+      lines.forEach((line, i) => {
+        const name = cnbcSectorMap[line.trim().toUpperCase()];
+        if (!name) return;
+        const parts = (lines[i + 1] || '').split('\t');
+        if (parts.length >= 3) {
+          const m = parts[2].trim().match(/^([+-]?\d+\.?\d*)$/);
+          if (m) results.push({ name, daily: parseFloat(m[1]) });
+        }
+      });
+      return results;
+    });
+    await page.close();
+
+    // merge daily + weekly เข้า table เรียงตาม daily
+    if (cnbcSectors.length > 0) {
+      // สร้าง weekly map จาก result.sectors ที่ดึงมาแล้ว
+      const weeklyMap = {};
+      // parse จาก upList + worst
+      const allSectorStr = result.sectors.upList + ', ' + result.sectors.worst;
+      allSectorStr.split(',').forEach(s => {
+        const m = s.trim().match(/^(.+?)\s([+-]\d+\.\d+)%$/);
+        if (m) weeklyMap[m[1].trim()] = parseFloat(m[2]);
+      });
+
+      const upDaily   = cnbcSectors.filter(s => s.daily > 0).sort((a, b) => b.daily - a.daily);
+      const downDaily = cnbcSectors.filter(s => s.daily <= 0).sort((a, b) => a.daily - b.daily);
+      const allSorted = [...upDaily, ...downDaily];
+
+      result.sectors.table    = allSorted.map(s => ({
+        name:    s.name,
+        daily:   (s.daily > 0 ? '+' : '') + s.daily.toFixed(2) + '%',
+        weekly:  weeklyMap[s.name] !== undefined ? (weeklyMap[s.name] > 0 ? '+' : '') + weeklyMap[s.name].toFixed(2) + '%' : '-',
+      }));
+      result.sectors.upCount  = upDaily.length;
+      result.sectors.best     = upDaily[0]   ? upDaily[0].name   + ' ' + (upDaily[0].daily > 0 ? '+' : '')   + upDaily[0].daily.toFixed(2)   + '%' : '';
+      result.sectors.worst    = downDaily[0] ? downDaily[0].name + ' ' + downDaily[0].daily.toFixed(2) + '%' : '';
+      console.log('Sectors (daily): up', upDaily.length, '| best:', result.sectors.best, '| worst:', result.sectors.worst);
+    }
+  } catch (e) {
+    console.error('getMarketData cnbc sectors error:', e.message);
   }
 
   return result;
@@ -347,6 +408,13 @@ async function summarizeWithClaude(articlesText) {
   }
 }
 
+// ─── helper: sanitize text กรองอักขระที่ font TH Sarabun New ไม่รองรับ ──────
+function sanitize(text) {
+  if (!text) return '';
+  // เก็บเฉพาะ: ไทย, ASCII (อังกฤษ/ตัวเลข/เครื่องหมาย), และ whitespace
+  return text.replace(/[^ -฀-๿\s]/g, '');
+}
+
 // ─── 4. สร้าง .docx ──────────────────────────────────────────────────────────
 
 function buildDocx(data, marketData) {
@@ -378,10 +446,11 @@ function buildDocx(data, marketData) {
 
   // ดัชนีหลัก
   overviewBlocks.push(subHeader('ดัชนีหลัก'));
+  const fmtIndex = (label, d) => d ? `ดัชนี ${label} ${d.last} (${d.pct})` : '';
   const indexText = [
-    marketData.sp500 ? `ดัชนี S&P 500 ${marketData.sp500}` : '',
-    marketData.nasdaq ? `ดัชนี Nasdaq ${marketData.nasdaq}` : '',
-    marketData.dow ? `ดัชนี Dow Jones ${marketData.dow}` : '',
+    fmtIndex('S&P 500',   marketData.sp500),
+    fmtIndex('Nasdaq',    marketData.nasdaq),
+    fmtIndex('Dow Jones', marketData.dow),
   ].filter(Boolean).join(', ');
   overviewBlocks.push(bodyText(indexText || '(ไม่สามารถดึงข้อมูลได้)'));
 
@@ -393,12 +462,52 @@ function buildDocx(data, marketData) {
   overviewBlocks.push(bodyText(yieldText));
 
   // ผลตอบแทนรายกลุ่ม
-  const sectorDateLabel = marketData.sectors.dateTh ? ` (ข้อมูล ณ ${marketData.sectors.dateTh})` : '';
-  overviewBlocks.push(subHeader('ผลตอบแทนรายกลุ่ม' + sectorDateLabel));
-  const sectorText = marketData.sectors.upList
-    ? `หุ้น ${marketData.sectors.upCount} จาก 11 กลุ่มปรับตัวเพิ่มขึ้น ได้แก่ ${marketData.sectors.upList} โดยกลุ่มที่ปรับตัวเพิ่มขึ้นมากที่สุด คือ ${marketData.sectors.best} ส่วนกลุ่มที่ปรับตัวลดลงมากที่สุด คือ ${marketData.sectors.worst}`
-    : '(ไม่สามารถดึงข้อมูลได้)';
-  overviewBlocks.push(bodyText(sectorText));
+  overviewBlocks.push(subHeader('ผลตอบแทนรายกลุ่ม'));
+
+  if (marketData.sectors.table && marketData.sectors.table.length > 0) {
+    // สรุป 1 ประโยค
+    const summaryText = `หุ้น ${marketData.sectors.upCount} จาก 11 กลุ่มปรับตัวเพิ่มขึ้น โดยกลุ่มที่ปรับตัวเพิ่มขึ้นมากที่สุด คือ ${marketData.sectors.best} ส่วนกลุ่มที่ปรับตัวลดลงมากที่สุด คือ ${marketData.sectors.worst}`;
+    overviewBlocks.push(bodyText(summaryText));
+
+    // ตาราง sector
+    const cellOpts = (text, isHeader, isUp) => {
+      const color = isHeader ? BLUE : (isUp === true ? '1A7340' : isUp === false ? 'C0392B' : '000000');
+      const fill  = isHeader ? 'EAF0FB' : 'FFFFFF';
+      return new TableCell({
+        shading: { fill, type: ShadingType.CLEAR, color: 'auto' },
+        children: [new Paragraph({
+          spacing: { before: 40, after: 40 },
+          children: [new TextRun({ text, bold: isHeader, size: 18, color, font: 'TH Sarabun New' })],
+        })],
+      });
+    };
+
+    const sectorTable = new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      rows: [
+        // header row
+        new TableRow({ children: [
+          cellOpts('Sector', true, null),
+          cellOpts('วันนี้ (CNBC)', true, null),
+          cellOpts(`สัปดาห์${marketData.sectors.dateTh ? ' (ณ ' + marketData.sectors.dateTh + ')' : ''}`, true, null),
+        ]}),
+        // data rows
+        ...marketData.sectors.table.map(s => {
+          const isUpDaily   = s.daily.startsWith('+');
+          const isUpWeekly  = s.weekly.startsWith('+');
+          return new TableRow({ children: [
+            cellOpts(s.name, false, null),
+            cellOpts(s.daily,  false, isUpDaily),
+            cellOpts(s.weekly === '-' ? '-' : s.weekly, false, s.weekly === '-' ? null : isUpWeekly),
+          ]});
+        }),
+      ],
+    });
+    overviewBlocks.push(sectorTable);
+    overviewBlocks.push(new Paragraph({ spacing: { before: 60, after: 0 }, children: [] }));
+  } else {
+    overviewBlocks.push(bodyText('(ไม่สามารถดึงข้อมูลได้)'));
+  }
 
   // สรุปภาพรวมข่าว
   overviewBlocks.push(subHeader('สรุปภาพรวมข่าว'));
@@ -415,7 +524,7 @@ function buildDocx(data, marketData) {
     const blocks = [];
     blocks.push(new Paragraph({
       heading: HeadingLevel.HEADING_2, spacing: { before: 220, after: 60 },
-      children: [new TextRun({ text: `${index + 1}.  ${item.title}`, bold: true, size: 24, color: BLUE, font: 'TH Sarabun New' })],
+      children: [new TextRun({ text: `${index + 1}.  ${sanitize(item.title)}`, bold: true, size: 24, color: BLUE, font: 'TH Sarabun New' })],
     }));
     blocks.push(new Paragraph({
       spacing: { before: 0, after: 80 },
@@ -426,7 +535,7 @@ function buildDocx(data, marketData) {
     }));
     item.bullets.forEach(b => blocks.push(new Paragraph({
       numbering: { reference: 'bullets', level: 0 }, spacing: { before: 40, after: 40 },
-      children: [new TextRun({ text: b, size: 21, font: 'TH Sarabun New' })],
+      children: [new TextRun({ text: sanitize(b), size: 21, font: 'TH Sarabun New' })],
     })));
     const linkLabel = new TextRun({ text: 'ลิงก์: ', size: 18, color: GRAY, font: 'TH Sarabun New', bold: true });
     if (item.urls.length === 1) {
