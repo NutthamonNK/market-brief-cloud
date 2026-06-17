@@ -470,35 +470,45 @@ function buildDocx(data, marketData) {
     overviewBlocks.push(bodyText(summaryText));
 
     // ตาราง sector
-    const cellOpts = (text, isHeader, isUp) => {
-      const color = isHeader ? BLUE : (isUp === true ? '1A7340' : isUp === false ? 'C0392B' : '000000');
+    // A4 content width = 11906 - 1417 (left) - 1134 (right) = 9355 DXA
+    // col widths: Sector 55%, วันนี้ 22.5%, สัปดาห์ 22.5%
+    const COL1 = 5145, COL2 = 2105, COL3 = 2105;
+    const border = { style: BorderStyle.SINGLE, size: 1, color: 'DADCE0' };
+    const borders = { top: border, bottom: border, left: border, right: border };
+
+    const makeCell = (text, isHeader, isUp) => {
+      const color = isHeader ? BLUE : (isUp === true ? '1A7340' : isUp === false ? 'C0392B' : '333333');
       const fill  = isHeader ? 'EAF0FB' : 'FFFFFF';
+      const colW  = arguments[3] || COL1;
       return new TableCell({
-        shading: { fill, type: 'clear', color: 'auto' },
+        width: { size: colW, type: WidthType.DXA },
+        borders,
+        shading: { fill, type: ShadingType.CLEAR },
+        margins: { top: 80, bottom: 80, left: 120, right: 120 },
         children: [new Paragraph({
-          spacing: { before: 40, after: 40 },
-          children: [new TextRun({ text, bold: isHeader, size: 18, color, font: 'TH Sarabun New' })],
+          children: [new TextRun({ text: String(text), bold: isHeader, size: 18, color, font: 'TH Sarabun New' })],
         })],
       });
     };
 
+    const weeklyHeader = `สัปดาห์${marketData.sectors.dateTh ? ' (ณ ' + marketData.sectors.dateTh + ')' : ''}`;
+
     const sectorTable = new Table({
-      width: { size: 100, type: WidthType.PERCENTAGE },
+      width: { size: COL1 + COL2 + COL3, type: WidthType.DXA },
+      columnWidths: [COL1, COL2, COL3],
       rows: [
-        // header row
         new TableRow({ children: [
-          cellOpts('Sector', true, null),
-          cellOpts('วันนี้ (CNBC)', true, null),
-          cellOpts(`สัปดาห์${marketData.sectors.dateTh ? ' (ณ ' + marketData.sectors.dateTh + ')' : ''}`, true, null),
+          makeCell('Sector',       true, null, COL1),
+          makeCell('วันนี้ (CNBC)', true, null, COL2),
+          makeCell(weeklyHeader,   true, null, COL3),
         ]}),
-        // data rows
         ...marketData.sectors.table.map(s => {
-          const isUpDaily   = s.daily.startsWith('+');
-          const isUpWeekly  = s.weekly.startsWith('+');
+          const isUpDaily  = s.daily.startsWith('+');
+          const isUpWeekly = s.weekly !== '-' && s.weekly.startsWith('+');
           return new TableRow({ children: [
-            cellOpts(s.name, false, null),
-            cellOpts(s.daily,  false, isUpDaily),
-            cellOpts(s.weekly === '-' ? '-' : s.weekly, false, s.weekly === '-' ? null : isUpWeekly),
+            makeCell(s.name,   false, null,             COL1),
+            makeCell(s.daily,  false, isUpDaily,        COL2),
+            makeCell(s.weekly, false, s.weekly === '-' ? null : isUpWeekly, COL3),
           ]});
         }),
       ],
