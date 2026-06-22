@@ -711,7 +711,7 @@ async function main() {
     })));
     articles.forEach(a => console.log(a.url, '|', a.publishedTime));
 
-    const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const oneDayAgo = new Date(Date.now() - 36 * 60 * 60 * 1000); // 36h เผื่อข่าววันหยุดสุดสัปดาห์
     const valid = articles
       .filter(a => {
         if (a.isPro) { console.log('SKIP isPro:', a.url); return false; }
