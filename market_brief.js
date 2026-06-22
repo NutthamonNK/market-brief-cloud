@@ -402,7 +402,7 @@ async function summarizeWithClaude(articlesText) {
 ตอบเป็น JSON ล้วน ไม่มี markdown backticks:
 {
   "date_th": "วันX ที่X เดือน พ.ศ.",
-  "date_slug": "YYYY-MM-DD",
+  "date_slug": "YYYY-MM-DD (ปี Gregorian เช่น 2026-06-21 ห้ามใช้ปี พ.ศ.)",
   "overview_news": "สรุปข่าวเด่น 2-3 ประโยค ระบุตัวเลขและชื่อหุ้นเฉพาะ",
   "news": [{
     "category": "market|company|economy",
