@@ -52,6 +52,7 @@ async function getMarketData(browser) {
       const djia   = getIndexData('DJIA');
 
       // ── Bond Yield: "US 10-YR" / "4.439\t+0.011" tab-separated ──
+      // กรณี unchanged CNBC แสดง change เป็น "UNCH"
       let bondValue = '', bondChange = '';
       const bondIdx = lines.findIndex(l => /^US\s*10-YR$/i.test(l));
       if (bondIdx !== -1) {
@@ -72,13 +73,18 @@ async function getMarketData(browser) {
     result.yield10y.value = marketAll.bondValue ? marketAll.bondValue + '%' : '';
     if (marketAll.bondChange) {
       const raw = parseFloat(marketAll.bondChange);
-      const bps = raw * 100;
-      // ป้องกัน ++ กรณี bondChange มี + อยู่แล้ว
-      const changeStr = marketAll.bondChange.startsWith('+') || marketAll.bondChange.startsWith('-')
-        ? marketAll.bondChange
-        : (raw >= 0 ? '+' : '') + marketAll.bondChange;
-      result.yield10y.change    = `${changeStr} (${bps % 1 === 0 ? bps : bps.toFixed(1)} bps)`;
-      result.yield10y.direction = raw >= 0 ? 'เพิ่มขึ้น' : 'ลดลง';
+      if (/UNCH/i.test(marketAll.bondChange) || isNaN(raw)) {
+        // ค่าไม่เปลี่ยนแปลง
+        result.yield10y.change    = '';
+        result.yield10y.direction = 'ไม่เปลี่ยนแปลง';
+      } else {
+        const bps = raw * 100;
+        const changeStr = marketAll.bondChange.startsWith('+') || marketAll.bondChange.startsWith('-')
+          ? marketAll.bondChange
+          : (raw >= 0 ? '+' : '') + marketAll.bondChange;
+        result.yield10y.change    = `${changeStr} (${bps % 1 === 0 ? bps : bps.toFixed(1)} bps)`;
+        result.yield10y.direction = raw >= 0 ? 'เพิ่มขึ้น' : 'ลดลง';
+      }
     }
     await page.close();
     console.log('S&P 500:', marketAll.sp500  ? `${marketAll.sp500.last} | change: ${marketAll.sp500.chg} (${marketAll.sp500.pct})`   : 'NOT FOUND');
@@ -485,9 +491,14 @@ function buildDocx(data, marketData) {
 
   // อัตราผลตอบแทนพันธบัตร
   overviewBlocks.push(subHeader('อัตราผลตอบแทนพันธบัตร'));
-  const yieldText = marketData.yield10y.value
-    ? `อัตราผลตอบแทนพันธบัตรรัฐบาลสหรัฐฯ อายุ 10 ปี ปรับตัว${marketData.yield10y.direction} ${marketData.yield10y.change} อยู่ที่ระดับ ${marketData.yield10y.value}`
-    : '(ไม่สามารถดึงข้อมูลได้)';
+  let yieldText;
+  if (!marketData.yield10y.value) {
+    yieldText = '(ไม่สามารถดึงข้อมูลได้)';
+  } else if (marketData.yield10y.direction === 'ไม่เปลี่ยนแปลง') {
+    yieldText = `อัตราผลตอบแทนพันธบัตรรัฐบาลสหรัฐฯ อายุ 10 ปี ไม่เปลี่ยนแปลง อยู่ที่ระดับ ${marketData.yield10y.value}`;
+  } else {
+    yieldText = `อัตราผลตอบแทนพันธบัตรรัฐบาลสหรัฐฯ อายุ 10 ปี ปรับตัว${marketData.yield10y.direction} ${marketData.yield10y.change} อยู่ที่ระดับ ${marketData.yield10y.value}`;
+  }
   overviewBlocks.push(bodyText(yieldText));
 
   // ผลตอบแทนรายกลุ่ม
@@ -655,9 +666,9 @@ async function sendEmail(dateSlug, dateTh, docxBuffer) {
     auth: { user: process.env.GMAIL_USER, pass: process.env.GMAIL_APP_PASSWORD },
   });
   const months = ['ม.ค.','ก.พ.','มี.ค.','เม.ย.','พ.ค.','มิ.ย.','ก.ค.','ส.ค.','ก.ย.','ต.ค.','พ.ย.','ธ.ค.'];
-  const [year, month, day] = dateSlug.split('-');
-  const buddhistYear = parseInt(year) + 543;
-  const shortDate = `${parseInt(day)} ${months[parseInt(month)-1]} ${buddhistYear}`;
+  // ใช้วันปัจจุบันเวลาไทยให้ตรงกับ date_th ใน docx (ไม่อิง dateSlug ที่เป็นวันที่ของบทความ)
+  const nowTh = new Date(new Date().getTime() + 7 * 60 * 60 * 1000);
+  const shortDate = `${nowTh.getUTCDate()} ${months[nowTh.getUTCMonth()]} ${nowTh.getUTCFullYear() + 543}`;
   await transporter.sendMail({
     from: process.env.GMAIL_USER,
     to: process.env.GMAIL_TO,
